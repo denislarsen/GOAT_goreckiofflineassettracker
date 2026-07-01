@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portfolio Early-Warning Dashboard</title>
+<style>
+:root {
+  --green: #1e9e5a;
+  --green-bg: #e8f8ee;
+  --yellow: #b8860b;
+  --yellow-bg: #fdf3d8;
+  --red: #c92a2a;
+  --red-bg: #fbe6e6;
+  --bg: #f4f6f8;
+  --card-bg: #ffffff;
+  --border: #e1e5ea;
+  --text: #1c2230;
+  --text-muted: #5b6472;
+  --radius: 10px;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 20px 28px;
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar h1 { margin: 0; font-size: 1.4rem; }
+.subtitle { margin: 4px 0 0; color: var(--text-muted); font-size: 0.9rem; }
+
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+
+.dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.dot.status-green { background: var(--green); }
+.dot.status-yellow { background: var(--yellow); }
+.dot.status-red { background: var(--red); }
+
+.overall-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.overall-badge.status-green { background: var(--green-bg); color: var(--green); }
+.overall-badge.status-yellow { background: var(--yellow-bg); color: var(--yellow); }
+.overall-badge.status-red { background: var(--red-bg); color: var(--red); }
+
+.btn {
+  padding: 9px 16px;
+  border-radius: 8px;
+  border: none;
+  background: #1c2230;
+  color: white;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.btn:disabled { opacity: 0.6; cursor: default; }
+.btn-secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+main { max-width: 1100px; margin: 0 auto; padding: 24px 20px 60px; }
+
+.summary-bar {
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+.summary-item { display: flex; flex-direction: column; gap: 2px; }
+.summary-label { font-size: 0.78rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.summary-value { font-weight: 600; }
+
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 18px;
+}
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-left: 5px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+.card.status-green { border-left-color: var(--green); }
+.card.status-yellow { border-left-color: var(--yellow); }
+.card.status-red { border-left-color: var(--red); }
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.card-header h3 { margin: 0; font-size: 1.05rem; flex: 1; }
+.card-allocation {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  background: var(--bg);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.card-status-label { font-size: 0.8rem; font-weight: 600; color: var(--text-muted); }
+
+.cash-note { color: var(--text-muted); font-size: 0.92rem; margin: 4px 0 0; }
+
+.ticker-row + .ticker-row {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px dashed var(--border);
+}
+
+.ticker-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.ticker-symbol { font-weight: 700; }
+.ticker-label { color: var(--text-muted); font-size: 0.85rem; flex: 1; min-width: 140px; }
+.ticker-price { font-weight: 600; }
+.ticker-change { font-size: 0.85rem; font-weight: 600; }
+.ticker-change.positive { color: var(--green); }
+.ticker-change.negative { color: var(--red); }
+
+.indicators {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  background: var(--bg);
+  border-radius: 6px;
+  padding: 6px 8px;
+  cursor: help;
+}
+.indicator .dot { width: 8px; height: 8px; }
+.indicator-label { color: var(--text-muted); flex: 1; }
+.indicator-value { font-weight: 600; }
+
+.ticker-note {
+  margin-top: 8px;
+  font-size: 0.78rem;
+  color: var(--yellow);
+  background: var(--yellow-bg);
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+.legend {
+  margin-top: 30px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+.legend h2 { margin-top: 0; font-size: 1rem; }
+.legend-grid { display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px; }
+.legend-row { display: flex; align-items: center; gap: 10px; font-size: 0.9rem; }
+.legend-note { color: var(--text-muted); font-size: 0.85rem; margin: 0; }
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 24, 32, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+.modal.hidden { display: none; }
+.modal-content {
+  position: relative;
+  background: var(--card-bg);
+  border-radius: var(--radius);
+  padding: 24px;
+  max-width: 460px;
+  width: 100%;
+}
+.modal-content h2 { margin-top: 0; }
+.modal-content label { display: block; margin-top: 12px; font-size: 0.85rem; font-weight: 600; }
+.modal-content input {
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  margin-top: 6px;
+  font-size: 0.9rem;
+}
+.modal-hint { color: var(--text-muted); font-size: 0.8rem; }
+.modal-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+.modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  border: none;
+  background: transparent;
+  font-size: 1.3rem;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
+@media (max-width: 600px) {
+  .topbar { flex-direction: column; align-items: flex-start; }
+  .topbar-right { width: 100%; justify-content: space-between; }
+}
+
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="topbar-left">
+      <h1>Portfolio Early-Warning Dashboard</h1>
+      <p class="subtitle">Emerging Markets 50% &middot; Gold &amp; Silver 20% &middot; Cash 20% &middot; Developed Markets 10%</p>
+    </div>
+    <div class="topbar-right">
+      <div id="overallBadge" class="overall-badge status-green">
+        <span class="dot"></span>
+        <span id="overallBadgeText">All Clear</span>
+      </div>
+      <button id="refreshBtn" class="btn">Refresh Now</button>
+      <button id="settingsBtn" class="btn btn-secondary" aria-label="Settings">&#9881;</button>
+    </div>
+  </header>
+
+  <main>
+    <section id="summaryBar" class="summary-bar">
+      <div class="summary-item">
+        <span class="summary-label">Data mode</span>
+        <span id="dataModeText" class="summary-value">Offline demo data</span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">Last updated</span>
+        <span id="lastUpdatedText" class="summary-value">&mdash;</span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">Portfolio at risk</span>
+        <span id="atRiskText" class="summary-value">0% of allocation flagged</span>
+      </div>
+    </section>
+
+    <section id="cardsGrid" class="cards-grid"></section>
+
+    <section class="legend">
+      <h2>How to read this</h2>
+      <div class="legend-grid">
+        <div class="legend-row"><span class="dot status-green"></span><strong>Green &mdash; Stable.</strong> No early-warning signs triggered.</div>
+        <div class="legend-row"><span class="dot status-yellow"></span><strong>Yellow &mdash; Watch.</strong> One or two indicators are flashing early weakness. Worth monitoring, not yet acting on.</div>
+        <div class="legend-row"><span class="dot status-red"></span><strong>Red &mdash; Alert.</strong> A confirmed drop, downtrend, or multiple simultaneous warning signs. Consider reviewing this position.</div>
+      </div>
+      <p class="legend-note">Each asset class (except Cash) is scored on four indicators: drawdown from its recent 20-day high, the 10/30-day moving-average trend, 5-day momentum, and a volatility spike on down days. Cash carries no market price risk, so it is always shown as stable.</p>
+    </section>
+  </main>
+
+  <div id="settingsModal" class="modal hidden">
+    <div class="modal-content">
+      <h2>Settings</h2>
+      <p>By default this dashboard runs on bundled sample data so it works fully offline. To see live prices, add a free Alpha Vantage API key (get one at alphavantage.co) &mdash; it is stored only in this browser.</p>
+      <label for="apiKeyInput">Alpha Vantage API key</label>
+      <input type="text" id="apiKeyInput" placeholder="e.g. ABCD1234EFGH5678">
+      <p class="modal-hint">Free keys are rate-limited (roughly 25 requests/day). The dashboard caches results and spaces out requests automatically.</p>
+      <div class="modal-actions">
+        <button id="clearKeyBtn" class="btn btn-secondary">Use offline demo data</button>
+        <button id="saveKeyBtn" class="btn">Save &amp; use live data</button>
+      </div>
+      <button id="closeSettingsBtn" class="modal-close" aria-label="Close">&times;</button>
+    </div>
+  </div>
+
+  <script>
+// Portfolio definition and bundled offline demo data.
+// Loaded before app.js; PORTFOLIO and DEMO_SERIES are shared top-level bindings.
+
+const PORTFOLIO = [
+  {
+    id: 'em',
+    name: 'Emerging Markets Stocks',
+    allocation: 50,
+    tickers: [
+      { symbol: 'EEM', label: 'iShares MSCI Emerging Markets ETF' },
+    ],
+  },
+  {
+    id: 'metals',
+    name: 'Gold & Silver',
+    allocation: 20,
+    tickers: [
+      { symbol: 'GLD', label: 'Gold (SPDR Gold Shares)' },
+      { symbol: 'SLV', label: 'Silver (iShares Silver Trust)' },
+    ],
+  },
+  {
+    id: 'cash',
+    name: 'Cash',
+    allocation: 20,
+    tickers: [],
+  },
+  {
+    id: 'developed',
+    name: 'Developed Market Stocks',
+    allocation: 10,
+    tickers: [
+      { symbol: 'EFA', label: 'iShares MSCI EAFE ETF' },
+    ],
+  },
+];
+
+// Builds a closing-price series from a starting price and a list of daily % changes.
+function buildSeries(startPrice, pctChanges) {
+  const closes = [startPrice];
+  let price = startPrice;
+  for (const pct of pctChanges) {
+    price = price * (1 + pct / 100);
+    closes.push(Math.round(price * 100) / 100);
+  }
+  return closes;
+}
+
+// Turns a plain array of closes into {date, close} points ending "today".
+function toDatedSeries(closes) {
+  const points = [];
+  const today = new Date();
+  for (let i = 0; i < closes.length; i++) {
+    const daysAgo = closes.length - 1 - i;
+    const d = new Date(today);
+    d.setDate(d.getDate() - daysAgo);
+    points.push({ date: d.toISOString().slice(0, 10), close: closes[i] });
+  }
+  return points;
+}
+
+// Mild, steady drift with small day-to-day noise -- used for "healthy" demo assets.
+const STABLE_UPTREND = [
+  0.3, -0.1, 0.2, 0.4, -0.2, 0.3, 0.1, -0.3, 0.5, 0.2,
+  -0.1, 0.3, 0.2, -0.2, 0.4, 0.1, -0.1, 0.3, 0.2, -0.3,
+  0.4, 0.1, 0.2, -0.1, 0.3, 0.2, -0.2, 0.3, 0.1, -0.1,
+  0.2, 0.3, -0.1, 0.2,
+];
+
+// Same base drift, then a mild pullback in the final week -- used for a "watch" demo asset.
+const MILD_PULLBACK = [
+  0.3, -0.1, 0.2, 0.4, -0.2, 0.3, 0.1, -0.3, 0.5, 0.2,
+  -0.1, 0.3, 0.2, -0.2, 0.4, 0.1, -0.1, 0.3, 0.2, -0.3,
+  0.4, 0.1, 0.2, -0.1,
+  0.0, -0.1, 0.1, -0.2, -0.3, -0.2, -0.4, -0.3, -0.5, -0.4,
+];
+
+// Same base drift, then an accelerating sell-off -- used for an "alert" demo asset.
+const SHARP_DECLINE = [
+  0.3, -0.1, 0.2, 0.4, -0.2, 0.3, 0.1, -0.3, 0.5, 0.2,
+  -0.1, 0.3, 0.2, -0.2, 0.4, 0.1, -0.1, 0.3, 0.2, -0.3,
+  0.4, 0.1, 0.2, -0.1,
+  -1.0, -1.3, -1.1, -1.6, -1.8, -1.3, -2.0, -1.5, -3.0, -1.8,
+];
+
+const DEMO_SERIES = {
+  EEM: toDatedSeries(buildSeries(42.00, SHARP_DECLINE)),
+  GLD: toDatedSeries(buildSeries(215.00, STABLE_UPTREND)),
+  SLV: toDatedSeries(buildSeries(27.50, MILD_PULLBACK)),
+  EFA: toDatedSeries(buildSeries(78.00, STABLE_UPTREND)),
+};
+
+
+// Early-warning logic + rendering for the portfolio dashboard.
+// Relies on PORTFOLIO and DEMO_SERIES from portfolio.js.
+
+const ALPHA_VANTAGE_URL = 'https://www.alphavantage.co/query';
+const CACHE_KEY = 'pw_cache_v1';
+const API_KEY_STORAGE = 'pw_api_key';
+const REQUEST_SPACING_MS = 1200;
+const REFRESH_COOLDOWN_MS = 30000;
+
+const SEVERITY = { GREEN: 0, YELLOW: 1, RED: 2 };
+const SEVERITY_NAME = ['green', 'yellow', 'red'];
+const SEVERITY_LABEL = ['Stable', 'Watch', 'Alert'];
+
+// ---- Indicator math -------------------------------------------------------
+
+function dailyReturns(closes) {
+  const returns = [];
+  for (let i = 1; i < closes.length; i++) {
+    returns.push(((closes[i] - closes[i - 1]) / closes[i - 1]) * 100);
+  }
+  return returns;
+}
+
+function average(values) {
+  if (values.length === 0) return 0;
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+function computeIndicators(series) {
+  const closes = series.map((p) => p.close);
+  const n = closes.length;
+  const today = closes[n - 1];
+
+  // 1. Drawdown from the recent (up to 20-session) high.
+  const lookback20 = closes.slice(Math.max(0, n - 20));
+  const recentHigh = Math.max(...lookback20);
+  const drawdownPct = ((recentHigh - today) / recentHigh) * 100;
+  let drawdownSeverity = SEVERITY.GREEN;
+  if (drawdownPct > 7) drawdownSeverity = SEVERITY.RED;
+  else if (drawdownPct > 3) drawdownSeverity = SEVERITY.YELLOW;
+
+  // 2. 10-day vs 30-day moving-average trend.
+  const sma10 = average(closes.slice(Math.max(0, n - 10)));
+  const sma30 = average(closes.slice(Math.max(0, n - 30)));
+  const maDiffPct = ((sma10 - sma30) / sma30) * 100;
+  let trendSeverity = SEVERITY.GREEN;
+  if (maDiffPct < -2) trendSeverity = SEVERITY.RED;
+  else if (maDiffPct < 0) trendSeverity = SEVERITY.YELLOW;
+
+  // 3. 5-day momentum (rate of change).
+  const roc5Base = closes[Math.max(0, n - 6)];
+  const roc5Pct = ((today - roc5Base) / roc5Base) * 100;
+  let momentumSeverity = SEVERITY.GREEN;
+  if (roc5Pct < -5) momentumSeverity = SEVERITY.RED;
+  else if (roc5Pct < -2) momentumSeverity = SEVERITY.YELLOW;
+
+  // 4. Volatility spike on a down day (today's move vs its typical size).
+  const returns = dailyReturns(closes);
+  const todayReturn = returns[returns.length - 1];
+  const priorReturns = returns.slice(Math.max(0, returns.length - 21), returns.length - 1);
+  const avgAbsReturn = average(priorReturns.map(Math.abs));
+  const volRatio = avgAbsReturn > 0 ? Math.abs(todayReturn) / avgAbsReturn : 0;
+  let volSeverity = SEVERITY.GREEN;
+  if (todayReturn < 0) {
+    if (volRatio >= 2.5) volSeverity = SEVERITY.RED;
+    else if (volRatio >= 1.5) volSeverity = SEVERITY.YELLOW;
+  }
+
+  const indicators = [
+    { key: 'drawdown', label: '20-day drawdown', value: `-${drawdownPct.toFixed(1)}%`, severity: drawdownSeverity,
+      detail: `Down ${drawdownPct.toFixed(1)}% from its recent 20-session high of ${recentHigh.toFixed(2)}.` },
+    { key: 'trend', label: '10/30-day trend', value: `${maDiffPct >= 0 ? '+' : ''}${maDiffPct.toFixed(1)}%`, severity: trendSeverity,
+      detail: `10-day average is ${maDiffPct.toFixed(1)}% vs the 30-day average (negative = short-term downtrend).` },
+    { key: 'momentum', label: '5-day momentum', value: `${roc5Pct >= 0 ? '+' : ''}${roc5Pct.toFixed(1)}%`, severity: momentumSeverity,
+      detail: `Price moved ${roc5Pct.toFixed(1)}% over the last 5 sessions.` },
+    { key: 'volatility', label: 'Volatility spike', value: `${volRatio.toFixed(1)}x`, severity: volSeverity,
+      detail: todayReturn < 0
+        ? `Today's drop is ${volRatio.toFixed(1)}x the recent average daily move.`
+        : `No down-day volatility spike (today's move was flat or positive).` },
+  ];
+
+  let overallSeverity = Math.max(...indicators.map((i) => i.severity));
+  const yellowOrWorseCount = indicators.filter((i) => i.severity >= SEVERITY.YELLOW).length;
+  if (overallSeverity === SEVERITY.YELLOW && yellowOrWorseCount >= 3) {
+    overallSeverity = SEVERITY.RED; // multiple simultaneous warning signs = confirmed risk
+  }
+
+  const latest = series[series.length - 1];
+  const prev = series[series.length - 2];
+  const dayChangePct = prev ? ((latest.close - prev.close) / prev.close) * 100 : 0;
+
+  return {
+    price: latest.close,
+    date: latest.date,
+    dayChangePct,
+    indicators,
+    severity: overallSeverity,
+  };
+}
+
+// ---- Data access (live fetch + offline cache + demo fallback) -------------
+
+function getApiKey() {
+  return localStorage.getItem(API_KEY_STORAGE) || '';
+}
+
+function setApiKey(key) {
+  if (key) localStorage.setItem(API_KEY_STORAGE, key);
+  else localStorage.removeItem(API_KEY_STORAGE);
+}
+
+function readCache() {
+  try {
+    return JSON.parse(localStorage.getItem(CACHE_KEY)) || {};
+  } catch {
+    return {};
+  }
+}
+
+function writeCache(cache) {
+  localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+}
+
+function allSymbols() {
+  const symbols = [];
+  for (const cls of PORTFOLIO) {
+    for (const t of cls.tickers) symbols.push(t.symbol);
+  }
+  return symbols;
+}
+
+async function fetchLiveSeries(symbol, apiKey) {
+  const url = `${ALPHA_VANTAGE_URL}?function=TIME_SERIES_DAILY&symbol=${encodeURIComponent(symbol)}&outputsize=compact&apikey=${encodeURIComponent(apiKey)}`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const json = await res.json();
+  if (json['Note'] || json['Information']) throw new Error('rate-limited');
+  const raw = json['Time Series (Daily)'];
+  if (!raw) throw new Error(json['Error Message'] || 'unexpected response');
+  const series = Object.keys(raw)
+    .sort()
+    .map((date) => ({ date, close: parseFloat(raw[date]['4. close']) }));
+  return series;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Fetches (or falls back to cache/demo data for) every symbol used by the portfolio.
+async function loadAllSeries(onProgress) {
+  const apiKey = getApiKey();
+  const symbols = allSymbols();
+  const result = {};
+  const notes = {};
+
+  if (!apiKey) {
+    for (const symbol of symbols) result[symbol] = DEMO_SERIES[symbol];
+    return { series: result, notes, mode: 'demo' };
+  }
+
+  const cache = readCache();
+  let anyLive = false;
+
+  for (let i = 0; i < symbols.length; i++) {
+    const symbol = symbols[i];
+    if (onProgress) onProgress(symbol, i + 1, symbols.length);
+    try {
+      const series = await fetchLiveSeries(symbol, apiKey);
+      result[symbol] = series;
+      cache[symbol] = { series, fetchedAt: new Date().toISOString() };
+      anyLive = true;
+    } catch (err) {
+      const cached = cache[symbol];
+      if (cached) {
+        result[symbol] = cached.series;
+        notes[symbol] = `Live fetch failed (${err.message}) — showing cached data from ${new Date(cached.fetchedAt).toLocaleString()}.`;
+      } else {
+        result[symbol] = DEMO_SERIES[symbol];
+        notes[symbol] = `Live fetch failed (${err.message}) — showing offline demo data.`;
+      }
+    }
+    if (i < symbols.length - 1) await sleep(REQUEST_SPACING_MS);
+  }
+
+  writeCache(cache);
+  return { series: result, notes, mode: anyLive ? 'live' : 'demo-fallback' };
+}
+
+// ---- Rendering --------------------------------------------------------
+
+function severityDotHtml(severity, extraClass) {
+  return `<span class="dot status-${SEVERITY_NAME[severity]} ${extraClass || ''}"></span>`;
+}
+
+function renderOverallBadge(severity) {
+  const badge = document.getElementById('overallBadge');
+  const text = document.getElementById('overallBadgeText');
+  badge.className = `overall-badge status-${SEVERITY_NAME[severity]}`;
+  text.textContent = severity === SEVERITY.GREEN ? 'All Clear'
+    : severity === SEVERITY.YELLOW ? 'Some Caution'
+    : 'Action Needed';
+}
+
+function renderSummaryBar({ dataModeLabel, lastUpdated, atRiskPct }) {
+  document.getElementById('dataModeText').textContent = dataModeLabel;
+  document.getElementById('lastUpdatedText').textContent = lastUpdated;
+  document.getElementById('atRiskText').textContent = `${atRiskPct}% of allocation flagged`;
+}
+
+function tickerRowHtml(ticker, computed, note) {
+  const changeClass = computed.dayChangePct >= 0 ? 'positive' : 'negative';
+  const changeSign = computed.dayChangePct >= 0 ? '+' : '';
+  const indicatorsHtml = computed.indicators
+    .map((ind) => `
+      <div class="indicator" title="${ind.detail}">
+        ${severityDotHtml(ind.severity)}
+        <span class="indicator-label">${ind.label}</span>
+        <span class="indicator-value">${ind.value}</span>
+      </div>`)
+    .join('');
+
+  return `
+    <div class="ticker-row">
+      <div class="ticker-header">
+        ${severityDotHtml(computed.severity)}
+        <span class="ticker-symbol">${ticker.symbol}</span>
+        <span class="ticker-label">${ticker.label}</span>
+        <span class="ticker-price">$${computed.price.toFixed(2)}</span>
+        <span class="ticker-change ${changeClass}">${changeSign}${computed.dayChangePct.toFixed(2)}%</span>
+      </div>
+      <div class="indicators">${indicatorsHtml}</div>
+      ${note ? `<div class="ticker-note">${note}</div>` : ''}
+    </div>`;
+}
+
+function cashCardHtml(cls) {
+  return `
+    <article class="card status-green">
+      <header class="card-header">
+        ${severityDotHtml(SEVERITY.GREEN)}
+        <h3>${cls.name}</h3>
+        <span class="card-allocation">${cls.allocation}%</span>
+      </header>
+      <p class="cash-note">Cash carries no market price risk, so it is always shown as stable. Its main long-term risk is inflation eroding purchasing power, which this dashboard does not track live.</p>
+    </article>`;
+}
+
+function assetCardHtml(cls, seriesBySymbol, notes) {
+  let classSeverity = SEVERITY.GREEN;
+  const rows = cls.tickers.map((ticker) => {
+    const series = seriesBySymbol[ticker.symbol];
+    const computed = computeIndicators(series);
+    classSeverity = Math.max(classSeverity, computed.severity);
+    return tickerRowHtml(ticker, computed, notes[ticker.symbol]);
+  });
+
+  return `
+    <article class="card status-${SEVERITY_NAME[classSeverity]}">
+      <header class="card-header">
+        ${severityDotHtml(classSeverity)}
+        <h3>${cls.name}</h3>
+        <span class="card-allocation">${cls.allocation}%</span>
+        <span class="card-status-label">${SEVERITY_LABEL[classSeverity]}</span>
+      </header>
+      ${rows.join('')}
+    </article>`;
+}
+
+function render({ seriesBySymbol, notes, dataModeLabel, lastUpdated }) {
+  const grid = document.getElementById('cardsGrid');
+  let overallSeverity = SEVERITY.GREEN;
+  let atRiskAllocation = 0;
+
+  const cardsHtml = PORTFOLIO.map((cls) => {
+    if (cls.id === 'cash') return cashCardHtml(cls);
+
+    let classSeverity = SEVERITY.GREEN;
+    for (const ticker of cls.tickers) {
+      const computed = computeIndicators(seriesBySymbol[ticker.symbol]);
+      classSeverity = Math.max(classSeverity, computed.severity);
+    }
+    overallSeverity = Math.max(overallSeverity, classSeverity);
+    if (classSeverity >= SEVERITY.YELLOW) atRiskAllocation += cls.allocation;
+
+    return assetCardHtml(cls, seriesBySymbol, notes);
+  }).join('');
+
+  grid.innerHTML = cardsHtml;
+  renderOverallBadge(overallSeverity);
+  renderSummaryBar({ dataModeLabel, lastUpdated, atRiskPct: atRiskAllocation });
+}
+
+// ---- Controller ---------------------------------------------------------
+
+let refreshInFlight = false;
+
+async function refresh() {
+  if (refreshInFlight) return;
+  refreshInFlight = true;
+
+  const refreshBtn = document.getElementById('refreshBtn');
+  refreshBtn.disabled = true;
+  const originalText = refreshBtn.textContent;
+  refreshBtn.textContent = 'Refreshing…';
+
+  try {
+    const { series, notes, mode } = await loadAllSeries((symbol, i, total) => {
+      refreshBtn.textContent = `Refreshing ${symbol} (${i}/${total})…`;
+    });
+
+    const dataModeLabel = mode === 'demo'
+      ? 'Offline demo data'
+      : mode === 'live'
+        ? 'Live (Alpha Vantage)'
+        : 'Offline demo data (live fetch failed)';
+
+    render({
+      seriesBySymbol: series,
+      notes,
+      dataModeLabel,
+      lastUpdated: new Date().toLocaleString(),
+    });
+  } finally {
+    refreshInFlight = false;
+    refreshBtn.textContent = originalText;
+    const cooldown = getApiKey() ? REFRESH_COOLDOWN_MS : 0;
+    if (cooldown > 0) {
+      setTimeout(() => { refreshBtn.disabled = false; }, cooldown);
+    } else {
+      refreshBtn.disabled = false;
+    }
+  }
+}
+
+function wireSettingsModal() {
+  const modal = document.getElementById('settingsModal');
+  const apiKeyInput = document.getElementById('apiKeyInput');
+
+  document.getElementById('settingsBtn').addEventListener('click', () => {
+    apiKeyInput.value = getApiKey();
+    modal.classList.remove('hidden');
+  });
+  document.getElementById('closeSettingsBtn').addEventListener('click', () => modal.classList.add('hidden'));
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.classList.add('hidden');
+  });
+  document.getElementById('saveKeyBtn').addEventListener('click', () => {
+    setApiKey(apiKeyInput.value.trim());
+    modal.classList.add('hidden');
+    refresh();
+  });
+  document.getElementById('clearKeyBtn').addEventListener('click', () => {
+    setApiKey('');
+    apiKeyInput.value = '';
+    modal.classList.add('hidden');
+    refresh();
+  });
+}
+
+function init() {
+  document.getElementById('refreshBtn').addEventListener('click', refresh);
+  wireSettingsModal();
+  refresh();
+}
+
+document.addEventListener('DOMContentLoaded', init);
+
+</script>
+</body>
+</html>
