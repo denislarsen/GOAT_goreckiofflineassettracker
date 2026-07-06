@@ -469,38 +469,162 @@ dialog.closet-dialog {
   background: radial-gradient(circle at 35% 35%, #d95555, #a12b2b);
 }
 
-/* the doors you step through */
-.closet-doors {
+/* ---- the cinematic walk-in ---- */
+.closet-cine {
   position: fixed;
   inset: 0;
-  z-index: 60;
-  display: flex;
-  perspective: 1400px;
+  z-index: 70;
   pointer-events: none;
+  background: rgba(8, 4, 8, 0);
+  transition: background 0.4s;
 }
-.closet-doors .door {
-  flex: 1;
+.closet-cine.go { background: rgba(8, 4, 8, 0.94); animation: cineFade 0.7s ease 3.7s forwards; }
+@keyframes cineFade { to { background: rgba(8, 4, 8, 0); opacity: 0; } }
+
+/* title card, like the show's intro */
+.cine-title {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: "Snell Roundhand", "Apple Chancery", "Savoye LET", "Brush Script MT", cursive;
+  color: #ef86b2;
+  text-shadow: 0 0 22px rgba(239, 134, 178, 0.55), 0 2px 4px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  z-index: 3;
+}
+.cine-title span { font-size: 2.2rem; line-height: 1; }
+.cine-title { font-size: 3.6rem; line-height: 1.05; }
+.closet-cine.go .cine-title { animation: titlePop 1.15s cubic-bezier(0.2, 0.8, 0.3, 1) 0.1s forwards, titleGone 0.45s ease 1.35s forwards; }
+@keyframes titlePop { from { opacity: 0; transform: scale(0.82); letter-spacing: 0.08em; } to { opacity: 1; transform: scale(1); letter-spacing: 0.02em; } }
+@keyframes titleGone { to { opacity: 0; transform: scale(1.08); } }
+
+/* 3D stage: the room slides past the camera */
+.cine-stage {
+  position: absolute;
+  inset: 0;
+  perspective: 850px;
+  perspective-origin: 50% 46%;
+  overflow: hidden;
+}
+.cine-room {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+.closet-cine.go .cine-room { animation: dolly 2s cubic-bezier(0.55, 0, 0.25, 1) 1.7s forwards; }
+@keyframes dolly { from { transform: translateZ(0); } to { transform: translateZ(1150px); } }
+
+/* wardrobe walls rushing past — rails of hanging clothes drawn with gradients */
+.cine-wall {
+  position: absolute;
+  top: -12vh;
+  bottom: -12vh;
+  width: 1250px;
+  backface-visibility: hidden;
   background:
-    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.08) 0 3px, transparent 3px 26px),
-    linear-gradient(105deg, #9a6b45, #7c5233 55%, #66422a);
-  box-shadow: inset 0 0 0 10px rgba(58, 37, 22, 0.5), inset 0 0 60px rgba(0, 0, 0, 0.25);
-  position: relative;
-  transition: transform 1.5s cubic-bezier(0.6, 0, 0.3, 1);
+    /* clothes: irregular colored bands hanging below the rail */
+    repeating-linear-gradient(90deg,
+      #7a4462 0 54px, #b28dbb 54px 96px, #435a7c 96px 158px,
+      #c78f9b 158px 196px, #8c3c2a 196px 252px, #9db3c8 252px 300px),
+    linear-gradient(#2a1d26, #2a1d26);
+  background-size: 100% 62%, 100% 100%;
+  background-position: 0 100%, 0 0;
+  background-repeat: no-repeat, no-repeat;
+  box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.55);
 }
-.closet-doors .door.left { transform-origin: left center; }
-.closet-doors .door.right { transform-origin: right center; }
-.closet-doors .knob {
+.cine-wall::before {
+  /* the rail */
+  content: '';
+  position: absolute;
+  top: 36%;
+  left: 0;
+  right: 0;
+  height: 6px;
+  background: linear-gradient(#e8c98c, #a97f3d);
+}
+.cine-wall.left { left: 0; transform-origin: left center; transform: rotateY(86deg); }
+.cine-wall.right { right: 0; transform-origin: right center; transform: rotateY(-86deg); }
+
+.cine-floor {
+  position: absolute;
+  left: -14vw;
+  right: -14vw;
+  bottom: 0;
+  height: 1250px;
+  transform-origin: bottom center;
+  transform: rotateX(87deg);
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.18) 0 3px, transparent 3px 88px),
+    linear-gradient(#5e4633, #3c2c20);
+}
+.cine-ceiling {
+  position: absolute;
+  left: -14vw;
+  right: -14vw;
+  top: 0;
+  height: 1250px;
+  transform-origin: top center;
+  transform: rotateX(-87deg);
+  background: radial-gradient(ellipse at 50% 30%, #4d3a44, #201720 70%);
+}
+
+/* champagne light spilling out between the doors */
+.cine-glow {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 4px;
+  transform: translateX(-50%);
+  background: linear-gradient(rgba(255, 236, 190, 0), rgba(255, 236, 190, 0.95), rgba(255, 236, 190, 0));
+  filter: blur(6px);
+  opacity: 0;
+}
+.closet-cine.go .cine-glow { animation: glowOpen 1.3s ease 1.45s forwards; }
+@keyframes glowOpen { 0% { opacity: 0; width: 4px; } 25% { opacity: 1; } 100% { opacity: 0.35; width: 46vw; } }
+
+/* the doors themselves, hinged at the screen edges */
+.cine-door {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 50.5%;
+  background:
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, 0.1) 0 3px, transparent 3px 28px),
+    linear-gradient(105deg, #9a6b45, #7c5233 55%, #66422a);
+  box-shadow: inset 0 0 0 12px rgba(58, 37, 22, 0.55), inset 0 0 70px rgba(0, 0, 0, 0.3);
+  transition: transform 1.6s cubic-bezier(0.6, 0, 0.25, 1) 1.45s;
+  backface-visibility: visible;
+}
+.cine-door.left { left: 0; transform-origin: left center; }
+.cine-door.right { right: 0; transform-origin: right center; }
+.closet-cine.go .cine-door.left { transform: rotateY(-112deg); }
+.closet-cine.go .cine-door.right { transform: rotateY(112deg); }
+.cine-door .knob {
   position: absolute;
   top: 50%;
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   border-radius: 50%;
   background: radial-gradient(circle at 35% 35%, #ffe9a8, #b98f3e);
+  box-shadow: 0 0 10px rgba(255, 233, 168, 0.5);
 }
-.closet-doors .door.left .knob { right: 14px; }
-.closet-doors .door.right .knob { left: 14px; }
-.closet-doors.open .door.left { transform: rotateY(-105deg); }
-.closet-doors.open .door.right { transform: rotateY(105deg); }
+.cine-door.left .knob { right: 16px; }
+.cine-door.right .knob { left: 16px; }
+
+/* the paparazzi flash as you arrive */
+.cine-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  opacity: 0;
+  z-index: 4;
+}
+.closet-cine.go .cine-flash { animation: flashPop 0.55s ease-out 3.45s; }
+@keyframes flashPop { 0% { opacity: 0; } 18% { opacity: 0.95; } 100% { opacity: 0; } }
 
 .checkline { display: flex; align-items: center; gap: 8px; font-size: 0.86rem; font-weight: 400 !important; }
 .checkline input { width: auto !important; }
