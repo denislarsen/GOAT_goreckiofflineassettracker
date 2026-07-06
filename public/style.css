@@ -615,6 +615,30 @@ dialog.closet-dialog {
 .cine-door.left .knob { right: 16px; }
 .cine-door.right .knob { left: 16px; }
 
+/* minimal mode: 3D scene draws its own doors — overlay is title + flash only */
+.closet-cine.minimal .cine-stage { display: none; }
+.closet-cine.minimal { background: rgba(8, 4, 8, 0); }
+.closet-cine.minimal.go { background: rgba(8, 4, 8, 0.25); }
+
+/* the 3D closet canvas + its UI */
+.closet3d { position: fixed; inset: 0; z-index: 10; }
+.closet3d canvas { display: block; width: 100%; height: 100%; }
+.closet3d-ui {
+  position: fixed;
+  left: 18px;
+  bottom: 14px;
+  z-index: 12;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: rgba(253, 243, 226, 0.82);
+  border: 1px solid rgba(201, 163, 94, 0.5);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.closet3d-ui .closet-exit { margin-top: 0; }
+.closet3d-hint { font-family: Georgia, serif; font-style: italic; font-size: 0.72rem; color: #9c7a63; }
+
 /* the paparazzi flash as you arrive */
 .cine-flash {
   position: absolute;
