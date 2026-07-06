@@ -1,0 +1,9 @@
+services:
+  goat:
+    build: .
+    container_name: goat
+    ports:
+      - "8420:8420"
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

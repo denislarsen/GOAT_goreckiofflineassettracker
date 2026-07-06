@@ -1,27 +1,47 @@
-# GOAT_goreckiofflineassettracker
+# GOAT — Gorecki Offline Asset Tracker
 
-## Portfolio Early-Warning Dashboard
+A small, self-hosted app for tracking multifaceted investments — index funds,
+unlisted startup shares, cash positions — entirely on your own NAS. No cloud,
+no external APIs, no accounts: one Node process and one JSON file.
 
-A single-page dashboard for a portfolio allocated 50% Emerging Markets stocks,
-20% Gold & Silver, 20% Cash, and 10% Developed Market stocks. Each asset class
-gets a green/yellow/red early-warning light so problems are visible at a
-glance.
+## What it does
 
-**Run it:** open `app/index.html` in a browser (or serve the `app/` folder
-with any static file server). It works immediately using bundled offline
-demo data — no setup needed.
+- **Investments** of any kind: funds, startup shares, cash, other. Each one
+  carries notes, contact people (phone/email), and references to contracts or
+  documents stored on the NAS.
+- **Money in / out ledger** — record every contribution or withdrawal with a
+  date and note, so you can see exactly what you have paid in over time.
+- **Manual valuation snapshots** instead of live market feeds. Whenever you
+  learn what a position is worth (annual statement, funding round, bank depot
+  overview), record it. The app carries each investment at its latest
+  valuation plus any money moved in/out since, and shows a freshness badge
+  (fresh / months old / years old) so you always know how trustworthy the
+  number is. Positions with no valuation yet are carried at cost.
+- **Groups** — tag investments with an advisor (e.g. "Sopra Advice"), a theme,
+  or anything else, and see paid-in vs. value vs. gain per group.
+- **Dashboard** — portfolio value, net paid in, gain, allocation by type, and
+  which valuations need updating.
+- **Safety** — every save keeps the last 30 versions in `data/backups/`, plus
+  one-click JSON export/import from Settings.
 
-**Live prices (optional):** click the gear icon and add a free
-[Alpha Vantage](https://www.alphavantage.co) API key to pull live daily
-prices for EEM (Emerging Markets), GLD/SLV (Gold/Silver), and EFA (Developed
-Markets). The key is stored only in your browser. If a live fetch fails or
-you don't set a key, the dashboard falls back to cached or demo data
-automatically.
+## Running it
 
-**How the warning light for each asset class is decided:** for every ticker,
-four indicators are computed from its recent daily closes — drawdown from its
-20-day high, the 10-day vs 30-day moving-average trend, 5-day momentum, and a
-volatility spike on down days. Each indicator is green/yellow/red on its own;
-an asset class turns red if any single indicator is a confirmed alert, or if
-three or more indicators are flashing yellow at once. Cash carries no market
-price risk and is always shown as stable.
+Requires Node 18+ (no npm packages at all):
+
+```
+node server.js
+```
+
+Then open `http://<nas-address>:8420`. Data is stored in `data/goat-data.json`.
+
+Or with Docker (Synology/QNAP container managers work fine):
+
+```
+docker compose up -d
+```
+
+Configuration via environment variables: `PORT` (default 8420), `DATA_DIR`
+(default `./data`).
+
+> The app has no login — it is meant for a trusted home LAN. Don't expose the
+> port to the internet.
