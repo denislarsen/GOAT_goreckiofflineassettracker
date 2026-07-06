@@ -605,6 +605,122 @@ function viewSettings() {
     </div>`;
 }
 
+// ---------- Carrie's closet (the easter egg) ----------
+
+const BOX_BRAND = {
+  fund: 'Maison Index',
+  startup: 'Atelier Venture',
+  cash: 'Petty Cash & Co.',
+  other: 'Objet Trouvé',
+};
+
+function closetQuip(s) {
+  if (s.basis === 'cost') return 'never appraised — priceless, presumably';
+  const when = fmtDate(s.asOf);
+  if (s.gain > 0) return `appraised ${when}. Worth more than you paid. Fabulous.`;
+  if (s.gain < 0) return `appraised ${when}. We don't talk about it.`;
+  return `appraised ${when}. Exactly what you paid. How sensible.`;
+}
+
+function viewCloset() {
+  let contributed = 0, value = 0;
+  for (const inv of state.investments) {
+    const s = investmentSummary(inv);
+    contributed += s.contributed;
+    value += s.value;
+  }
+  const gain = value - contributed;
+  const gainLine = gain > 0
+    ? `up ${fmtMoney(gain)} on what you paid, darling`
+    : gain < 0
+      ? `down ${fmtMoney(-gain)} — but money can't buy style anyway`
+      : 'worth exactly what you paid. How rare.';
+
+  const shelves = [];
+  for (const g of state.groups) {
+    const members = state.investments.filter((i) => (i.groupIds || []).includes(g.id));
+    if (members.length) shelves.push({ title: `The ${g.name} collection`, members });
+  }
+  const solo = state.investments.filter((i) => !(i.groupIds || []).length);
+  if (solo.length) shelves.push({ title: 'One-of-a-kind pieces', members: solo });
+
+  const shelvesHtml = shelves.map((shelf) => `
+    <section class="shelf">
+      <div class="shelf-title">${esc(shelf.title)}</div>
+      <div class="shelf-boxes">
+        ${shelf.members.map((inv) => {
+          const s = investmentSummary(inv);
+          return `
+          <button class="shoebox" data-action="open-box" data-id="${esc(inv.id)}">
+            <span class="box-brand">${esc(BOX_BRAND[inv.type] || 'Vintage')}</span>
+            <span class="box-name">${esc(inv.name)}</span>
+            <span class="box-value">${fmtMoney(s.value)}</span>
+          </button>`;
+        }).join('')}
+      </div>
+    </section>`).join('');
+
+  return `
+    <div class="closet">
+      <h1>Carrie's Closet</h1>
+      <p class="tagline">“I like my money right where I can see it… hanging in my closet.”</p>
+      <div class="vanity">
+        <div class="mirror">
+          <div class="mirror-label">the mirror never lies, darling</div>
+          <div class="mirror-value">${fmtMoney(value)}</div>
+          <div class="mirror-gain">${gainLine}</div>
+        </div>
+      </div>
+      ${shelvesHtml || '<p class="closet-empty">An empty closet. Tragic. Add some investments first.</p>'}
+      <a class="closet-exit" href="#/dashboard">← tiptoe back to reality</a>
+    </div>`;
+}
+
+function openClosetBox(inv) {
+  const dialog = document.getElementById('dialog');
+  const form = document.getElementById('dialogForm');
+  const s = investmentSummary(inv);
+  const contribs = contributionsFor(inv.id);
+
+  const receipts = contribs.length ? contribs.map((c) => `
+    <div class="receipt-line">
+      <span>${fmtDate(c.date)}${c.note ? ` <span class="r-note">${esc(c.note)}</span>` : ''}</span>
+      <span>${c.amount >= 0 ? '' : '−'}${fmtMoney(Math.abs(c.amount))}</span>
+    </div>`).join('') : '<div class="closet-empty">No receipts. A gift? How mysterious.</div>';
+
+  const blackbook = (inv.contacts || []).length ? inv.contacts.map((c) => `
+    <div class="blackbook-entry"><b>${esc(c.name)}</b>${c.role ? ` — ${esc(c.role)}` : ''}
+      <div class="b-meta">${[c.phone, c.email].filter(Boolean).map(esc).join(' · ')}</div>
+    </div>`).join('') : '<div class="closet-empty">No one to call about this one.</div>';
+
+  form.innerHTML = `
+    <h2>${esc(inv.name)}</h2>
+    <p class="tagline">${esc(BOX_BRAND[inv.type] || 'Vintage')}</p>
+    <div class="closet-section">
+      <h3>The polaroid</h3>
+      <div class="polaroid">
+        <div class="p-value">${fmtMoney(s.value)}</div>
+        <div class="p-note">${esc(closetQuip(s))}</div>
+      </div>
+    </div>
+    <div class="closet-section">
+      <h3>The receipts — ${fmtMoney(s.contributed)} all told</h3>
+      ${receipts}
+    </div>
+    <div class="closet-section">
+      <h3>The little black book</h3>
+      ${blackbook}
+    </div>
+    ${inv.notes ? `<div class="closet-section"><h3>A note pinned to the lid</h3><div class="blackbook-entry">${esc(inv.notes)}</div></div>` : ''}
+    <div class="dialog-actions">
+      <button type="button" class="btn" data-close>Put the lid back on</button>
+    </div>`;
+  dialog.classList.add('closet-dialog');
+  form.querySelector('[data-close]').onclick = () => dialog.close();
+  form.onsubmit = (e) => { e.preventDefault(); dialog.close(); };
+  dialog.showModal();
+}
+
 // ---------- router & events ----------
 
 function route() {

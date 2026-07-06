@@ -248,6 +248,121 @@ dialog h2 { margin: 0 0 14px; font-size: 1.05rem; }
 /* ---- staleness note ---- */
 .stale-note { font-size: 0.78rem; color: var(--ink-muted); margin-top: 8px; }
 
+/* ---- Carrie's closet (the easter egg) ---- */
+.secret-shoe {
+  position: fixed;
+  right: 18px;
+  bottom: 14px;
+  font-size: 1.05rem;
+  opacity: 0.13;
+  text-decoration: none;
+  transition: opacity 0.25s, transform 0.25s;
+}
+.secret-shoe:hover { opacity: 1; transform: rotate(-14deg) scale(1.3); }
+
+/* The closet is its own world: fixed warm boudoir palette in both color schemes. */
+body.in-closet { background: #f6ead9; }
+body.in-closet .sidebar { display: none; }
+body.in-closet .view { max-width: 1100px; margin: 0 auto; }
+
+.closet { font-family: Georgia, 'Times New Roman', serif; color: #4a3128; }
+.closet h1 { font-size: 2rem; font-weight: 500; letter-spacing: 0.04em; margin: 8px 0 2px; }
+.closet .tagline { font-style: italic; color: #9c7a63; margin: 0 0 30px; font-size: 1rem; }
+
+.vanity { display: flex; justify-content: center; margin-bottom: 38px; }
+.mirror {
+  background: radial-gradient(ellipse at 30% 20%, #fffdf8, #f3e3cf 75%);
+  border: 10px solid #c9a35e;
+  border-radius: 50% / 38%;
+  padding: 34px 56px;
+  text-align: center;
+  box-shadow: 0 14px 32px rgba(74, 49, 40, 0.18), inset 0 0 44px rgba(201, 163, 94, 0.25);
+}
+.mirror-label { font-style: italic; font-size: 0.85rem; color: #b0705f; }
+.mirror-value { font-size: 2.1rem; margin: 6px 0 2px; }
+.mirror-gain { font-size: 0.9rem; color: #7d5a49; font-style: italic; }
+
+.shelf { margin-bottom: 36px; }
+.shelf-title {
+  font-variant: small-caps;
+  letter-spacing: 0.14em;
+  color: #7d5a49;
+  font-size: 1.02rem;
+  border-bottom: 3px double #c9a35e;
+  padding-bottom: 6px;
+  margin-bottom: 18px;
+}
+.shelf-boxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(195px, 1fr)); gap: 18px; }
+
+.shoebox {
+  position: relative;
+  border: none;
+  cursor: pointer;
+  text-align: left;
+  padding: 28px 16px 16px;
+  border-radius: 6px;
+  font-family: inherit;
+  color: #4a3128;
+  box-shadow: 0 6px 14px rgba(74, 49, 40, 0.16);
+  transition: transform 0.15s;
+}
+.shoebox:hover { transform: translateY(-5px) rotate(-0.6deg); }
+.shoebox::before {
+  content: '';
+  position: absolute;
+  top: 0; left: -4px; right: -4px;
+  height: 16px;
+  background: rgba(74, 49, 40, 0.14);
+  border-radius: 4px;
+}
+.shoebox:nth-child(4n+1) { background: #f6d9d4; }
+.shoebox:nth-child(4n+2) { background: #fdf3e2; }
+.shoebox:nth-child(4n+3) { background: #dde6d5; }
+.shoebox:nth-child(4n)   { background: #d9e4ee; }
+.box-brand { display: block; font-size: 0.62rem; letter-spacing: 0.22em; color: #9c7a63; text-transform: uppercase; }
+.box-name { display: block; font-size: 0.98rem; margin: 5px 0 9px; line-height: 1.25; }
+.box-value { display: block; font-size: 0.85rem; color: #7d5a49; }
+
+.closet-exit { display: inline-block; margin-top: 8px; font-style: italic; color: #9c7a63; text-decoration: none; font-size: 0.95rem; }
+.closet-exit:hover { color: #4a3128; }
+
+dialog.closet-dialog {
+  background: #fdf3e2;
+  border: 1px solid #c9a35e;
+  color: #4a3128;
+  font-family: Georgia, 'Times New Roman', serif;
+}
+.closet-dialog h2 { font-weight: 500; }
+.closet-dialog .tagline { font-style: italic; color: #9c7a63; margin: -8px 0 14px; font-size: 0.9rem; }
+.closet-section { margin: 16px 0; }
+.closet-section h3 {
+  font-variant: small-caps;
+  letter-spacing: 0.1em;
+  font-size: 0.85rem;
+  color: #9c7a63;
+  margin: 0 0 6px;
+  border-bottom: 1px solid #e4cba4;
+  padding-bottom: 3px;
+  font-weight: 500;
+}
+.receipt-line { display: flex; justify-content: space-between; gap: 12px; font-size: 0.9rem; padding: 3px 0; }
+.receipt-line .r-note { color: #9c7a63; font-style: italic; }
+.polaroid {
+  background: #fff;
+  padding: 14px 16px 10px;
+  box-shadow: 0 6px 14px rgba(74, 49, 40, 0.2);
+  transform: rotate(-2deg);
+  width: max-content;
+  max-width: 100%;
+  margin: 8px 0 4px;
+}
+.polaroid .p-value { font-size: 1.5rem; }
+.polaroid .p-note { font-size: 0.76rem; color: #7d5a49; font-style: italic; margin-top: 3px; }
+.blackbook-entry { font-size: 0.9rem; padding: 3px 0; }
+.blackbook-entry .b-meta { color: #9c7a63; font-size: 0.8rem; }
+.closet-empty { font-style: italic; color: #9c7a63; font-size: 0.9rem; }
+.closet-dialog .dialog-actions .btn { background: #4a3128; color: #fdf3e2; }
+
 @media (max-width: 700px) {
   .layout { flex-direction: column; }
   .sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; border-right: none; border-bottom: 1px solid var(--grid); padding: 12px 14px; }
