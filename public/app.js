@@ -864,12 +864,26 @@ function stopClosetTheme() {
 }
 
 function animateClosetEntrance() {
-  const doors = document.createElement('div');
-  doors.className = 'closet-doors';
-  doors.innerHTML = '<div class="door left"><span class="knob"></span></div><div class="door right"><span class="knob"></span></div>';
-  document.body.appendChild(doors);
-  requestAnimationFrame(() => requestAnimationFrame(() => doors.classList.add('open')));
-  setTimeout(() => doors.remove(), 2100);
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const o = document.createElement('div');
+  o.className = 'closet-cine';
+  o.innerHTML = `
+    <div class="cine-stage">
+      <div class="cine-room">
+        <div class="cine-wall left"></div>
+        <div class="cine-wall right"></div>
+        <div class="cine-floor"></div>
+        <div class="cine-ceiling"></div>
+        <div class="cine-glow"></div>
+        <div class="cine-door left"><span class="knob"></span></div>
+        <div class="cine-door right"><span class="knob"></span></div>
+      </div>
+    </div>
+    <div class="cine-title"><span>carrie's</span>closet</div>
+    <div class="cine-flash"></div>`;
+  document.body.appendChild(o);
+  requestAnimationFrame(() => requestAnimationFrame(() => o.classList.add('go')));
+  setTimeout(() => o.remove(), 4600);
 }
 
 function openClosetBox(inv) {
