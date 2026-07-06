@@ -28,6 +28,7 @@ const MIME = {
   '.pdf': 'application/pdf',
   '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.mp3': 'audio/mpeg',
 };
 
 const EMPTY_STATE = {
