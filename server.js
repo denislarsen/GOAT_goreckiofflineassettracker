@@ -25,6 +25,9 @@ const MIME = {
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
+  '.pdf': 'application/pdf',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 };
 
 const EMPTY_STATE = {
@@ -169,11 +172,29 @@ async function serveStatic(req, res, url) {
   }
 }
 
+// Document files imported from the old app live in DATA_DIR/documents.
+async function serveDocumentFile(req, res, url) {
+  const name = path.basename(decodeURIComponent(url.pathname.slice('/files/'.length)));
+  const abs = path.join(DATA_DIR, 'documents', name);
+  try {
+    const content = await fsp.readFile(abs);
+    res.writeHead(200, {
+      'Content-Type': MIME[path.extname(abs).toLowerCase()] || 'application/octet-stream',
+    });
+    res.end(content);
+  } catch {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('file not found');
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   try {
     if (url.pathname.startsWith('/api/')) {
       await handleApi(req, res, url);
+    } else if (url.pathname.startsWith('/files/')) {
+      await serveDocumentFile(req, res, url);
     } else {
       await serveStatic(req, res, url);
     }

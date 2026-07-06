@@ -252,7 +252,8 @@ function valuationForm(invId, existing) {
   });
 }
 
-function contactForm(inv, existing) {
+// `owner` is any object with a contacts array — an investment or a group.
+function contactForm(owner, existing) {
   openDialog(existing ? 'Edit contact' : 'Add contact', `
     ${field('Name', `<input name="name" required value="${esc(existing?.name || '')}">`)}
     <div class="field-row">
@@ -267,8 +268,8 @@ function contactForm(inv, existing) {
       delete existing._checked;
       mutate(() => {});
     } else {
-      inv.contacts = inv.contacts || [];
-      mutate(() => inv.contacts.push({ id: uid(), name: d.name, role: d.role, phone: d.phone, email: d.email, notes: d.notes }));
+      owner.contacts = owner.contacts || [];
+      mutate(() => owner.contacts.push({ id: uid(), name: d.name, role: d.role, phone: d.phone, email: d.email, notes: d.notes }));
     }
   });
 }
@@ -312,6 +313,20 @@ function gainCellHtml(gain, gainPct) {
   const sign = gain > 0 ? '+' : '';
   const pct = gainPct === null ? '' : ` (${sign}${gainPct.toFixed(1)}%)`;
   return `<span class="${cls}">${sign}${fmtMoney(gain)}${pct}</span>`;
+}
+
+function contactRowsHtml(contacts) {
+  if (!(contacts || []).length) return '<div class="empty">No contacts yet.</div>';
+  return contacts.map((c) => `
+    <div class="list-row">
+      <div><b>${esc(c.name)}</b>${c.role ? ` <span class="meta">${esc(c.role)}</span>` : ''}
+        <div class="meta">${[c.phone, c.email].filter(Boolean).map(esc).join(' · ')}</div>
+        ${c.notes ? `<div class="meta">${esc(c.notes)}</div>` : ''}</div>
+      <div class="row-actions">
+        <button class="iconbtn" data-action="edit-contact" data-id="${esc(c.id)}">Edit</button>
+        <button class="iconbtn" data-action="del-contact" data-id="${esc(c.id)}">Delete</button>
+      </div>
+    </div>`).join('');
 }
 
 function stalenessBadge(invId) {
@@ -458,20 +473,11 @@ function viewInvestmentDetail(id) {
       </div>
     </div>`).join('') : '<div class="empty">No valuations yet — carried at cost.</div>';
 
-  const contactRows = (inv.contacts || []).length ? inv.contacts.map((c) => `
-    <div class="list-row">
-      <div><b>${esc(c.name)}</b>${c.role ? ` <span class="meta">${esc(c.role)}</span>` : ''}
-        <div class="meta">${[c.phone, c.email].filter(Boolean).map(esc).join(' · ')}</div>
-        ${c.notes ? `<div class="meta">${esc(c.notes)}</div>` : ''}</div>
-      <div class="row-actions">
-        <button class="iconbtn" data-action="edit-contact" data-id="${esc(c.id)}">Edit</button>
-        <button class="iconbtn" data-action="del-contact" data-id="${esc(c.id)}">Delete</button>
-      </div>
-    </div>`).join('') : '<div class="empty">No contacts yet.</div>';
+  const contactRows = contactRowsHtml(inv.contacts);
 
   const docRows = (inv.documents || []).length ? inv.documents.map((d) => `
     <div class="list-row">
-      <div><b>${esc(d.title)}</b>
+      <div><b>${d.file ? `<a href="/files/${encodeURIComponent(d.file)}" target="_blank">${esc(d.title)}</a>` : esc(d.title)}</b>
         ${d.location ? `<div class="meta">${esc(d.location)}</div>` : ''}
         ${d.note ? `<div class="meta">${esc(d.note)}</div>` : ''}</div>
       <div class="row-actions">
@@ -568,6 +574,10 @@ function viewGroupDetail(id) {
     <div class="card">
       <div class="card-head"><h2>Investments in this group</h2></div>
       ${investmentsTable(s.members)}
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Contacts</h2><button class="btn ghost small" data-action="add-contact">+ Add</button></div>
+      ${contactRowsHtml(g.contacts)}
     </div>`;
 }
 
@@ -627,6 +637,8 @@ function handleAction(action, targetId) {
   const { id } = route();
   const inv = state.investments.find((i) => i.id === id);
   const group = state.groups.find((g) => g.id === id);
+  // Contacts live on whichever entity the current page shows.
+  const owner = inv || group;
 
   const actions = {
     'add-investment': () => investmentForm(null),
@@ -646,9 +658,9 @@ function handleAction(action, targetId) {
     'add-valuation': () => valuationForm(id, null),
     'edit-valuation': () => valuationForm(id, state.valuations.find((v) => v.id === targetId)),
     'del-valuation': () => mutate(() => { state.valuations = state.valuations.filter((v) => v.id !== targetId); }),
-    'add-contact': () => contactForm(inv, null),
-    'edit-contact': () => contactForm(inv, (inv.contacts || []).find((c) => c.id === targetId)),
-    'del-contact': () => mutate(() => { inv.contacts = inv.contacts.filter((c) => c.id !== targetId); }),
+    'add-contact': () => contactForm(owner, null),
+    'edit-contact': () => contactForm(owner, (owner.contacts || []).find((c) => c.id === targetId)),
+    'del-contact': () => mutate(() => { owner.contacts = owner.contacts.filter((c) => c.id !== targetId); }),
     'add-document': () => documentForm(inv, null),
     'edit-document': () => documentForm(inv, (inv.documents || []).find((d) => d.id === targetId)),
     'del-document': () => mutate(() => { inv.documents = inv.documents.filter((d) => d.id !== targetId); }),
