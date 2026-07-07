@@ -13,9 +13,9 @@
 // the painting's composition. Fine-tune with the tune mode: open #/garden,
 // tap the ✛ in the header, then click anywhere to read off coordinates.
 const GARDEN_ELEMENTS = [
-  { match: /safra/i, x: 12.4, y: 43, panel: 'eden', label: 'the owl in the fountain',
+  { match: /safra/i, x: 12.4, y: 48, panel: 'eden', label: 'the owl in the fountain',
     blurb: 'Discreet, watchful, installed at the very heart of Eden’s Fountain of Life. Private banking, as painted around 1500.' },
-  { match: /pawatech/i, x: 46.5, y: 56, panel: 'garden', label: 'the great egg',
+  { match: /pawatech/i, x: 67.5, y: 72.5, panel: 'garden', label: 'the great egg',
     blurb: 'The golden egg itself — carried through the garden while everyone wonders what will hatch.' },
   { match: /tallinn|apartment/i, x: 50, y: 12, panel: 'garden', label: 'the blue fountain-tower',
     blurb: 'A fantastical tower rising from the lake — Bosch’s idea of prime real estate, Old Town Tallinn’s spiritual ancestor.' },
@@ -25,18 +25,18 @@ const GARDEN_ELEMENTS = [
     blurb: 'A small bright bird carrying berries to many mouths — payments moving across Africa.' },
   { match: /simpler/i, x: 26.5, y: 55, panel: 'garden', label: 'the mallard',
     blurb: 'A careful bird that inspects everything before it swallows — due diligence, feathered.' },
-  { match: /winest/i, x: 40, y: 56.5, panel: 'garden', label: 'the mussel-shell cellar',
+  { match: /winest/i, x: 36, y: 71, panel: 'garden', label: 'the mussel-shell cellar',
     blurb: 'Bosch never painted a wine bottle, but he sealed revelers inside a great shell — the closest thing the garden has to a cellar.' },
-  { match: /furenfurn/i, x: 57, y: 73, panel: 'garden', label: 'the great fish',
+  { match: /furenfurn/i, x: 45.5, y: 85, panel: 'garden', label: 'the great fish',
     blurb: 'Big fish, generously fed. Lending to the largest creatures in the pond.' },
-  { match: /selected alternatives/i, x: 31, y: 79, panel: 'garden', label: 'the giant strawberry',
+  { match: /selected alternatives/i, x: 31.5, y: 81, panel: 'garden', label: 'the giant strawberry',
     blurb: 'Bosch died eight years before the first tomato reached Europe — this magnificent berry is as close as he got. The garden’s produce section.' },
   // The six TOBA funds ripen as fruits across the center panel.
   { match: /nasdaq/i, x: 36.5, y: 70, panel: 'garden', label: 'a fruit of the garden', blurb: 'One of the garden’s many fruits — tended by TOBA, ripening quietly.' },
   { match: /global research/i, x: 44, y: 68, panel: 'garden', label: 'a fruit of the garden', blurb: 'One of the garden’s many fruits — tended by TOBA, ripening quietly.' },
   { match: /cat bond/i, x: 52.5, y: 66, panel: 'garden', label: 'a fruit of the garden', blurb: 'A curious fruit that pays for storms — reinsurance, the garden’s strangest crop.' },
   { match: /small cap/i, x: 60, y: 68.5, panel: 'garden', label: 'a fruit of the garden', blurb: 'Small fruits in great numbers — the whole world’s orchard, miniature.' },
-  { match: /em research/i, x: 66, y: 72, panel: 'garden', label: 'a fruit of the garden', blurb: 'Fruit from the far corners of the garden — emerging markets, 1504 edition.' },
+  { match: /em research/i, x: 61, y: 63, panel: 'garden', label: 'a fruit of the garden', blurb: 'Fruit from the far corners of the garden — emerging markets, 1504 edition.' },
   { match: /world value/i, x: 56, y: 60.5, panel: 'garden', label: 'a fruit of the garden', blurb: 'The unfashionable fruit, bought cheaply — value investing, as old as orchards.' },
 ];
 
@@ -67,7 +67,8 @@ function viewGarden() {
       <div class="garden-title">The Garden of Gorecki</div>
       <div class="garden-status" id="gardenStatus"></div>
       <div class="garden-actions">
-        <button class="garden-tune" id="gardenTune" title="coordinate tuning">✛</button>
+        <button class="garden-save" id="gardenSave" hidden>save placements</button>
+        <button class="garden-tune" id="gardenTune" title="place the circles">✛</button>
         <a class="garden-exit" href="#/dashboard">← flee temptation</a>
       </div>
     </div>
@@ -79,17 +80,28 @@ function gardenSpots() {
   const spots = [];
   let fallbackIdx = 0;
   let hellIdx = 0;
+  const overrides = state.settings.gardenSpots || {};
   for (const inv of state.investments) {
     let el = GARDEN_ELEMENTS.find((e, i) => !taken.has(i) && e.match.test(inv.name));
     if (el) taken.add(GARDEN_ELEMENTS.indexOf(el));
     else el = { ...GARDEN_FALLBACKS[fallbackIdx++ % GARDEN_FALLBACKS.length], label: 'a wonder of the garden', blurb: 'A creature of the garden not yet named by Bosch.' };
+    const o = overrides[inv.id];
     const stale = ['warning', 'serious'].includes(staleness(inv.id).cls);
+    const spot = {
+      inv,
+      homeX: o ? o.x : el.x,
+      homeY: o ? o.y : el.y,
+      homeLabel: el.label,
+      blurb: el.blurb,
+      stale,
+    };
     if (stale) {
       const slot = HELL_SLOTS[hellIdx++ % HELL_SLOTS.length];
-      spots.push({ inv, x: slot.x, y: slot.y, label: slot.label, blurb: el.blurb, stale: true, homeLabel: el.label });
-    } else {
-      spots.push({ inv, x: el.x, y: el.y, label: el.label, blurb: el.blurb, stale: false });
+      spot.hellX = slot.x;
+      spot.hellY = slot.y;
+      spot.hellLabel = slot.label;
     }
+    spots.push(spot);
   }
   return spots;
 }
@@ -110,8 +122,8 @@ function mountGarden() {
         <ol>
           <li>On a computer, open <b>Wikimedia Commons</b> and search for
             <b>“The Garden of Earthly Delights by Bosch High Resolution”</b>
-            (commons.wikimedia.org). Open the image page and download a large version —
-            around 8,000&nbsp;pixels wide is perfect.</li>
+            (commons.wikimedia.org). Open the image page and download the
+            <b>“glued together”</b> version of roughly 12&nbsp;MB — it is perfect.</li>
           <li>Rename the downloaded file to <b>garden.jpg</b></li>
           <li>Copy it to the NAS into <b>docker/Gorecki/data/documents/</b> (File Station)</li>
           <li>Come back and tap the owl again 🦉</li>
@@ -134,17 +146,51 @@ function buildGardenViewer(wrap, img) {
   img.draggable = false;
   stage.appendChild(img);
 
-  const spotSize = Math.max(40, W * 0.030);
+  let tuneMode = false;
+  const spotSize = Math.max(48, W * 0.042);
+
+  function positionSpot(spot) {
+    // tune mode always shows home positions so every circle can be placed
+    const x = tuneMode || !spot.stale ? spot.homeX : spot.hellX;
+    const y = tuneMode || !spot.stale ? spot.homeY : spot.hellY;
+    spot.el.style.left = x + '%';
+    spot.el.style.top = y + '%';
+    spot.el.querySelector('.g-label').textContent = tuneMode || !spot.stale ? spot.homeLabel : spot.hellLabel;
+  }
+
   for (const spot of spots) {
     const el = document.createElement('button');
     el.className = 'g-hotspot' + (spot.stale ? ' stale' : '');
-    el.style.left = spot.x + '%';
-    el.style.top = spot.y + '%';
     el.style.width = el.style.height = spotSize + 'px';
-    el.innerHTML = `<span class="g-label">${esc(spot.label)}</span>`;
+    el.innerHTML = `<span class="g-label"></span>`;
+    spot.el = el;
+    positionSpot(spot);
+
+    el.addEventListener('pointerdown', (e) => {
+      if (!tuneMode) return;
+      // drag the circle onto its rightful element
+      e.stopPropagation();
+      e.preventDefault();
+      el.setPointerCapture(e.pointerId);
+      const onMove = (ev) => {
+        const rect = wrap.getBoundingClientRect();
+        spot.homeX = Math.max(0, Math.min(100, ((ev.clientX - rect.left - tx) / scale / W) * 100));
+        spot.homeY = Math.max(0, Math.min(100, ((ev.clientY - rect.top - ty) / scale / H) * 100));
+        positionSpot(spot);
+      };
+      const onUp = () => {
+        el.removeEventListener('pointermove', onMove);
+        el.removeEventListener('pointerup', onUp);
+        document.getElementById('gardenHint').textContent =
+          `${spot.inv.name} → x: ${spot.homeX.toFixed(1)}% · y: ${spot.homeY.toFixed(1)}% — press “save placements” to keep`;
+      };
+      el.addEventListener('pointermove', onMove);
+      el.addEventListener('pointerup', onUp);
+    });
+
     el.addEventListener('click', (e) => {
       e.stopPropagation();
-      if (moved > 8) return;
+      if (tuneMode || moved > 8) return;
       gardenFound.add(spot.inv.id);
       el.classList.add('found');
       updateGardenStatus(spots);
@@ -162,7 +208,6 @@ function buildGardenViewer(wrap, img) {
   let tx = (vw() - W * scale) / 2;
   let ty = (vh() - H * scale) / 2;
   let dragging = false, moved = 0, px = 0, py = 0, pinchDist = 0;
-  let tuneMode = false;
 
   function apply() {
     const fs = fitScale();
@@ -193,6 +238,7 @@ function buildGardenViewer(wrap, img) {
   });
   wrap.addEventListener('pointerup', (e) => {
     dragging = false;
+    if (e.target.closest && e.target.closest('.g-hotspot')) return;
     if (tuneMode && moved < 8) {
       const rect = wrap.getBoundingClientRect();
       const ix = ((e.clientX - rect.left - tx) / scale / W) * 100;
@@ -217,12 +263,27 @@ function buildGardenViewer(wrap, img) {
   wrap.addEventListener('touchend', () => { pinchDist = 0; });
 
   const tuneBtn = document.getElementById('gardenTune');
+  const saveBtn = document.getElementById('gardenSave');
   if (tuneBtn) tuneBtn.addEventListener('click', () => {
     tuneMode = !tuneMode;
     tuneBtn.classList.toggle('on', tuneMode);
+    if (saveBtn) saveBtn.hidden = !tuneMode;
+    for (const spot of spots) positionSpot(spot);
     document.getElementById('gardenHint').textContent = tuneMode
-      ? 'tune mode: click anywhere to read coordinates'
+      ? 'placement mode: drag each circle onto its element, then press “save placements”'
       : 'drag to wander · pinch or scroll to look closer · the glowing things are yours';
+  });
+  if (saveBtn) saveBtn.addEventListener('click', async () => {
+    const placements = {};
+    for (const spot of spots) {
+      placements[spot.inv.id] = {
+        x: Math.round(spot.homeX * 10) / 10,
+        y: Math.round(spot.homeY * 10) / 10,
+      };
+    }
+    state.settings.gardenSpots = placements;
+    await saveState();
+    document.getElementById('gardenHint').textContent = 'placements saved — the garden remembers, for everyone, forever';
   });
 
   const onResize = () => apply();
@@ -258,8 +319,8 @@ function openGardenBox(spot) {
 
   form.innerHTML = `
     <h2>${esc(inv.name)}</h2>
-    <p class="tagline">${esc(spot.label)}</p>
-    ${spot.stale ? `<div class="garden-damned">⚖️ This soul is trapped in hell — its last appraisal is ancient. Record a fresh valuation and it shall be redeemed into the garden${spot.homeLabel ? ` as ${esc(spot.homeLabel)}` : ''}.</div>` : ''}
+    <p class="tagline">${esc(spot.stale ? spot.hellLabel : spot.homeLabel)}</p>
+    ${spot.stale ? `<div class="garden-damned">⚖️ This soul is trapped in hell — its last appraisal is ancient. Record a fresh valuation and it shall be redeemed into the garden as ${esc(spot.homeLabel)}.</div>` : ''}
     <div class="closet-section">
       <h3>The appraisal</h3>
       <div class="polaroid">
