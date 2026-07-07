@@ -615,30 +615,6 @@ dialog.closet-dialog {
 .cine-door.left .knob { right: 16px; }
 .cine-door.right .knob { left: 16px; }
 
-/* minimal mode: 3D scene draws its own doors — overlay is title + flash only */
-.closet-cine.minimal .cine-stage { display: none; }
-.closet-cine.minimal { background: rgba(8, 4, 8, 0); }
-.closet-cine.minimal.go { background: rgba(8, 4, 8, 0.25); }
-
-/* the 3D closet canvas + its UI */
-.closet3d { position: fixed; inset: 0; z-index: 10; }
-.closet3d canvas { display: block; width: 100%; height: 100%; }
-.closet3d-ui {
-  position: fixed;
-  left: 18px;
-  bottom: 14px;
-  z-index: 12;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  background: rgba(253, 243, 226, 0.82);
-  border: 1px solid rgba(201, 163, 94, 0.5);
-  border-radius: 8px;
-  padding: 8px 12px;
-}
-.closet3d-ui .closet-exit { margin-top: 0; }
-.closet3d-hint { font-family: Georgia, serif; font-style: italic; font-size: 0.72rem; color: #9c7a63; }
-
 /* the paparazzi flash as you arrive */
 .cine-flash {
   position: absolute;
@@ -652,6 +628,158 @@ dialog.closet-dialog {
 
 .checkline { display: flex; align-items: center; gap: 8px; font-size: 0.86rem; font-weight: 400 !important; }
 .checkline input { width: auto !important; }
+
+/* ---- the Garden of Earthly Delights (the other easter egg) ---- */
+.secret-owl {
+  position: fixed;
+  right: 46px;
+  bottom: 12px;
+  font-size: 1.45rem;
+  opacity: 0.16;
+  text-decoration: none;
+  transition: opacity 0.25s, transform 0.25s;
+}
+.secret-owl:hover { opacity: 1; transform: rotate(8deg) scale(1.25); }
+
+body.in-garden { background: #14100b; }
+body.in-garden .sidebar { display: none; }
+body.in-garden .view { max-width: none; padding: 0; }
+
+.garden-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  overflow: hidden;
+  background: #14100b;
+  cursor: grab;
+  touch-action: none;
+}
+.garden-wrap:active { cursor: grabbing; }
+.garden-stage { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+.garden-img { display: block; width: 100%; height: 100%; user-select: none; }
+.garden-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #cbb27a;
+  font-family: Georgia, serif;
+  font-style: italic;
+}
+
+.g-hotspot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  background: radial-gradient(circle, rgba(255, 232, 160, 0.22) 0%, rgba(255, 232, 160, 0.05) 60%, transparent 75%);
+  box-shadow: 0 0 0 3px rgba(255, 216, 130, 0.85), 0 0 26px 8px rgba(255, 200, 90, 0.55);
+  animation: gPulse 2.2s ease-in-out infinite;
+}
+.g-hotspot:hover { animation-play-state: paused; box-shadow: 0 0 0 4px rgba(255, 232, 160, 1), 0 0 40px 14px rgba(255, 210, 100, 0.75); }
+.g-hotspot.stale {
+  background: radial-gradient(circle, rgba(255, 90, 60, 0.25) 0%, transparent 75%);
+  box-shadow: 0 0 0 3px rgba(255, 96, 60, 0.9), 0 0 26px 8px rgba(255, 60, 30, 0.6);
+}
+.g-hotspot.found { box-shadow: 0 0 0 3px rgba(150, 255, 170, 0.9), 0 0 18px 6px rgba(120, 230, 140, 0.45); animation: none; }
+@keyframes gPulse {
+  0%, 100% { box-shadow: 0 0 0 3px rgba(255, 216, 130, 0.85), 0 0 26px 8px rgba(255, 200, 90, 0.55); }
+  50% { box-shadow: 0 0 0 5px rgba(255, 216, 130, 0.55), 0 0 44px 16px rgba(255, 200, 90, 0.35); }
+}
+.g-label {
+  position: absolute;
+  top: 105%;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-family: Georgia, serif;
+  font-style: italic;
+  font-size: 13px;
+  color: #ffe9b0;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.9);
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+}
+.g-hotspot:hover .g-label { opacity: 1; }
+
+.garden-ui {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 18px;
+  background: linear-gradient(rgba(12, 9, 5, 0.88), rgba(12, 9, 5, 0.55) 80%, transparent);
+  font-family: Georgia, serif;
+  color: #e8d5a0;
+  pointer-events: none;
+}
+.garden-ui > * { pointer-events: auto; }
+.garden-title { font-size: 1.15rem; letter-spacing: 0.06em; font-variant: small-caps; }
+.garden-status { font-style: italic; font-size: 0.85rem; color: #cbb27a; flex: 1; }
+.garden-actions { display: flex; align-items: center; gap: 14px; }
+.garden-tune {
+  background: none;
+  border: 1px solid rgba(232, 213, 160, 0.35);
+  border-radius: 6px;
+  color: #cbb27a;
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 2px 8px;
+  opacity: 0.5;
+}
+.garden-tune.on { opacity: 1; border-color: #ffe9b0; color: #ffe9b0; }
+.garden-exit { color: #e8d5a0; text-decoration: none; font-style: italic; font-size: 0.95rem; }
+.garden-exit:hover { color: #fff3cf; }
+.garden-hint {
+  position: fixed;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 12;
+  font-family: Georgia, serif;
+  font-style: italic;
+  font-size: 0.8rem;
+  color: rgba(232, 213, 160, 0.75);
+  background: rgba(12, 9, 5, 0.6);
+  padding: 4px 14px;
+  border-radius: 999px;
+  pointer-events: none;
+}
+
+.garden-missing {
+  max-width: 560px;
+  margin: 10vh auto 0;
+  background: #f6ecd8;
+  border: 1px solid #c9a35e;
+  border-radius: 12px;
+  padding: 28px 32px;
+  font-family: Georgia, serif;
+  color: #4a3a22;
+  position: relative;
+  z-index: 11;
+}
+.garden-missing h2 { margin: 0 0 10px; font-weight: 500; }
+.garden-missing ol { padding-left: 20px; }
+.garden-missing li { margin-bottom: 8px; }
+.garden-missing-note { font-style: italic; font-size: 0.85rem; color: #7d6a45; }
+.garden-missing .garden-exit { color: #7d6a45; }
+
+.garden-damned {
+  background: #f8ddd3;
+  border: 1px solid #d03b3b;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 0.88rem;
+  color: #7a2513;
+  margin-bottom: 12px;
+}
 
 @media (max-width: 700px) {
   .layout { flex-direction: column; }

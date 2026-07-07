@@ -498,7 +498,8 @@ function viewDashboard() {
         <tbody>${groupCards}</tbody>
       </table>
     </div>` : ''}
-    <a class="secret-shoe" href="#/closet" title="ssshh…">👠</a>`;
+    <a class="secret-shoe" href="#/closet" title="ssshh…">👠</a>
+    <a class="secret-owl" href="#/garden" title="hoo…">🦉</a>`;
 }
 
 function viewInvestments() {
@@ -687,63 +688,7 @@ function closetQuip(s) {
   return `appraised ${when}. Exactly what you paid. How sensible.`;
 }
 
-function webglOK() {
-  try {
-    const c = document.createElement('canvas');
-    return !!(c.getContext('webgl2') || c.getContext('webgl'));
-  } catch {
-    return false;
-  }
-}
-
 function viewCloset() {
-  if (!webglOK()) return viewCloset2D();
-  return `
-    <div class="closet">
-      <div id="closet3d" class="closet3d"></div>
-      <div class="closet3d-ui">
-        <a class="closet-exit" href="#/dashboard">← tiptoe back to reality</a>
-        <span class="closet3d-hint">drag to look around · tap anything to open it</span>
-      </div>
-    </div>`;
-}
-
-let closet3dHandle = null;
-
-async function mountCloset3D() {
-  const el = document.getElementById('closet3d');
-  if (!el) return;
-  try {
-    const mod = await import('./closet3d.js');
-    const kindSlot = { egg: 'shoe', bank: 'dress', property: 'deed' };
-    const payload = { boxes: [], shoe: null, dress: null, deed: null };
-    let contributed = 0, value = 0;
-    for (const inv of state.investments) {
-      const s = investmentSummary(inv);
-      contributed += s.contributed;
-      value += s.value;
-      const item = { id: inv.id, name: inv.name, valueText: fmtMoney(s.value) };
-      const slot = inv.cornerstone ? kindSlot[cornerstoneKind(inv)] : null;
-      if (slot && !payload[slot]) payload[slot] = item;
-      else payload.boxes.push(item);
-    }
-    const gain = value - contributed;
-    payload.totalText = fmtMoney(value);
-    payload.gainText = gain >= 0
-      ? `up ${fmtMoney(gain)} on what you paid, darling`
-      : `down ${fmtMoney(-gain)} — but money can't buy style`;
-    closet3dHandle = await mod.startCloset3D(el, payload, (invId) => {
-      const inv = state.investments.find((i) => i.id === invId);
-      if (inv) openClosetBox(inv);
-    });
-  } catch (err) {
-    console.error('3D closet failed, falling back to 2D:', err);
-    const view = document.getElementById('view');
-    if (route().page === 'closet') view.innerHTML = viewCloset2D();
-  }
-}
-
-function viewCloset2D() {
   let contributed = 0, value = 0;
   for (const inv of state.investments) {
     const s = investmentSummary(inv);
@@ -919,12 +864,10 @@ function stopClosetTheme() {
   }
 }
 
-function animateClosetEntrance(minimal) {
+function animateClosetEntrance() {
   if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
   const o = document.createElement('div');
-  // minimal mode: the 3D scene draws its own doors and camera glide, so the
-  // overlay only contributes the title card and the paparazzi flash.
-  o.className = 'closet-cine' + (minimal ? ' minimal' : '');
+  o.className = 'closet-cine';
   o.innerHTML = `
     <div class="cine-stage">
       <div class="cine-room">
@@ -1011,21 +954,20 @@ function render() {
     group: () => viewGroupDetail(id),
     settings: () => viewSettings(),
     closet: () => viewCloset(),
+    garden: () => viewGarden(),
   };
-  if (closet3dHandle) {
-    closet3dHandle.dispose();
-    closet3dHandle = null;
+  if (gardenHandle) {
+    gardenHandle.dispose();
+    gardenHandle = null;
   }
   view.innerHTML = (views[page] || views.dashboard)();
   document.body.classList.toggle('in-closet', page === 'closet');
-  if (page === 'closet') {
-    const use3d = webglOK();
-    if (lastPage !== 'closet') {
-      animateClosetEntrance(use3d);
-      playClosetTheme();
-    }
-    if (use3d) mountCloset3D();
+  document.body.classList.toggle('in-garden', page === 'garden');
+  if (page === 'closet' && lastPage !== 'closet') {
+    animateClosetEntrance();
+    playClosetTheme();
   }
+  if (page === 'garden') mountGarden();
   if (page !== 'closet' && lastPage === 'closet') stopClosetTheme();
   lastPage = page;
   document.querySelectorAll('.sidebar a').forEach((a) => {
