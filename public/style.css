@@ -1,15 +1,21 @@
-/* GOAT — tokens follow the validated reference palette (light + dark selected). */
+/* GOAT — chrome tokens follow Gorecki's design system (the calm
+   "private banking" palette from the Gorecki site: paper, ink, muted green,
+   gold, Georgia display serif). Chart series/status colors keep the validated
+   reference palette. */
 :root {
-  --surface-1: #fcfcfb;
-  --page: #f9f9f7;
-  --ink: #0b0b0b;
-  --ink-2: #52514e;
-  --ink-muted: #898781;
-  --grid: #e1e0d9;
-  --baseline: #c3c2b7;
-  --border: rgba(11, 11, 11, 0.10);
-  --delta-good: #006300;
-  --delta-bad: #d03b3b;
+  --surface-1: #ffffff;
+  --page: #f8fafc;      /* paper */
+  --ink: #0f172a;
+  --ink-2: #475569;     /* ink-soft */
+  --ink-muted: #64748b;
+  --grid: #e2e8f0;      /* line */
+  --baseline: #cbd5e1;
+  --border: #e2e8f0;
+  --brand: #15803d;
+  --brand-dark: #166534;
+  --gold: #b59410;
+  --delta-good: #16a34a;
+  --delta-bad: #dc2626;
   /* categorical slots (fixed order): fund, startup, cash, other */
   --series-1: #2a78d6;
   --series-2: #1baf7a;
@@ -21,26 +27,30 @@
   --status-warning: #fab219;
   --status-serious: #ec835a;
   --status-critical: #d03b3b;
-  --accent: #2a78d6;
-  --radius: 10px;
+  --accent: #15803d;
+  --radius: 12px;
+  --display: Georgia, "Times New Roman", serif;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --surface-1: #1a1a19;
-    --page: #0d0d0d;
-    --ink: #ffffff;
-    --ink-2: #c3c2b7;
-    --ink-muted: #898781;
-    --grid: #2c2c2a;
-    --baseline: #383835;
-    --border: rgba(255, 255, 255, 0.10);
-    --delta-good: #0ca30c;
+    --surface-1: #101826;
+    --page: #0b1220;
+    --ink: #f1f5f9;
+    --ink-2: #b6c2d1;
+    --ink-muted: #7d8b9d;
+    --grid: #23304a;
+    --baseline: #33415e;
+    --border: #23304a;
+    --brand: #22a55b;
+    --brand-dark: #15803d;
+    --gold: #cbaa2a;
+    --delta-good: #34c26b;
     --series-1: #3987e5;
     --series-2: #199e70;
     --series-3: #c98500;
-    --series-4: #008300;
+    --series-4: #1f9e1f;
     --series-5: #9085e9;
-    --accent: #3987e5;
+    --accent: #22a55b;
   }
 }
 
@@ -67,8 +77,8 @@ body {
 }
 .brand { display: flex; gap: 10px; align-items: center; margin-bottom: 20px; padding: 0 8px; }
 .brand-mark { font-size: 1.6rem; }
-.brand-name { font-weight: 700; letter-spacing: 0.02em; }
-.brand-sub { font-size: 0.72rem; color: var(--ink-muted); }
+.brand-name { font-family: var(--display); font-size: 1.25rem; letter-spacing: -0.01em; }
+.brand-sub { font-size: 0.62rem; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.14em; }
 .sidebar a {
   padding: 8px 10px;
   border-radius: 8px;
@@ -84,7 +94,7 @@ body {
 
 /* ---- main view ---- */
 .view { flex: 1; padding: 26px 30px 60px; max-width: 1060px; }
-.view h1 { font-size: 1.35rem; margin: 0 0 4px; }
+.view h1 { font-family: var(--display); font-size: 1.55rem; font-weight: 500; letter-spacing: -0.01em; margin: 0 0 4px; }
 .view-sub { color: var(--ink-2); margin: 0 0 22px; font-size: 0.9rem; }
 .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 
@@ -95,17 +105,55 @@ body {
   font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
-  background: var(--ink);
-  color: var(--page);
+  background: var(--brand);
+  color: #fff;
 }
-.btn:hover { opacity: 0.88; }
+.btn:hover { background: var(--brand-dark); }
 .btn.ghost {
   background: transparent;
   color: var(--ink);
   box-shadow: inset 0 0 0 1px var(--baseline);
 }
+.btn.ghost:hover { background: var(--page); }
 .btn.danger { background: transparent; color: var(--delta-bad); box-shadow: inset 0 0 0 1px var(--delta-bad); }
+.btn.danger:hover { background: color-mix(in srgb, var(--delta-bad) 8%, transparent); }
 .btn.small { padding: 5px 10px; font-size: 0.8rem; }
+
+/* ---- liquidity staircase (dashboard hero) ---- */
+.liq-band { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px; margin-bottom: 14px; }
+.liq-step {
+  background: var(--surface-1);
+  border: 1px solid var(--grid);
+  border-left: 4px solid var(--baseline);
+  border-radius: var(--radius);
+  padding: 16px 18px 14px;
+}
+.liq-step.now { border-left-color: var(--brand); }
+.liq-step.term { border-left-color: var(--gold); }
+.liq-step.exit { border-left-color: var(--ink-muted); }
+.liq-label { font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-2); }
+.liq-value { font-family: var(--display); font-size: 1.75rem; margin-top: 6px; font-variant-numeric: tabular-nums; }
+.liq-step.now .liq-value { color: var(--brand-dark); }
+.liq-sub { font-size: 0.78rem; color: var(--ink-muted); margin-top: 4px; }
+.liq-bar { display: flex; height: 10px; border-radius: 999px; overflow: hidden; gap: 2px; margin-bottom: 10px; }
+.liq-seg { min-width: 4px; }
+.liq-seg.liq-liquid { background: var(--brand); }
+.liq-seg.liq-term { background: var(--gold); }
+.liq-seg.liq-illiquid { background: var(--ink-muted); }
+.liq-foot { display: flex; gap: 18px; flex-wrap: wrap; font-size: 0.82rem; color: var(--ink-2); margin: 0 2px 24px; }
+.liq-foot b { font-variant-numeric: tabular-nums; }
+.liq-total { color: var(--ink-muted); margin-left: auto; }
+.card-sub { font-size: 0.78rem; color: var(--ink-muted); margin: 2px 0 0; }
+td .sub { display: block; font-weight: 400; font-size: 0.74rem; color: var(--ink-muted); }
+.liq-sub-term { color: var(--gold); }
+.liq-sub-liquid { color: var(--brand); }
+
+/* ---- quick value update dialog ---- */
+.quick-current { font-size: 0.88rem; color: var(--ink-2); margin: 0 0 12px; }
+.btn.confirm-same { width: 100%; background: var(--brand); }
+.btn.confirm-same:hover { background: var(--brand-dark); }
+.quick-divider { display: flex; align-items: center; gap: 10px; color: var(--ink-muted); font-size: 0.76rem; margin: 14px 0 10px; }
+.quick-divider::before, .quick-divider::after { content: ''; flex: 1; height: 1px; background: var(--grid); }
 
 /* ---- stat tiles ---- */
 .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 22px; }
@@ -116,7 +164,7 @@ body {
   padding: 14px 16px;
 }
 .tile-label { font-size: 0.78rem; color: var(--ink-2); }
-.tile-value { font-size: 1.5rem; font-weight: 600; margin-top: 4px; }
+.tile-value { font-family: var(--display); font-size: 1.5rem; margin-top: 4px; font-variant-numeric: tabular-nums; }
 .tile-delta { font-size: 0.8rem; margin-top: 2px; }
 .tile-delta.up { color: var(--delta-good); }
 .tile-delta.down { color: var(--delta-bad); }
@@ -130,7 +178,7 @@ body {
   padding: 16px 18px;
   margin-bottom: 18px;
 }
-.card h2 { font-size: 0.95rem; margin: 0 0 12px; }
+.card h2 { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-2); margin: 0 0 12px; }
 .card-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .card-head h2 { margin: 0; }
 

@@ -21,6 +21,21 @@ const GROUP_KINDS = {
   custom: 'Custom',
 };
 
+// Liquidity tiers — the operational question: when could this money actually
+// be in your hands?
+const LIQ_META = {
+  liquid: { label: 'Liquid', step: 'Available now' },
+  term: { label: 'Fixed term', step: 'Locked · known horizon' },
+  illiquid: { label: 'Illiquid', step: 'Until an exit' },
+};
+const LIQ_ORDER = ['liquid', 'term', 'illiquid'];
+
+// Older records have no liquidity field; infer a conservative default from type.
+function liquidityOf(inv) {
+  if (LIQ_META[inv.liquidity]) return inv.liquidity;
+  return inv.type === 'cash' || inv.type === 'fund' ? 'liquid' : 'illiquid';
+}
+
 // ---------- utilities ----------
 
 function uid() {
@@ -202,14 +217,21 @@ function investmentForm(existing) {
     ${field('Name', `<input name="name" required value="${esc(existing?.name || '')}" placeholder="e.g. Nordea EM Index Fund">`)}
     ${field('Type', `<select name="type">${TYPE_ORDER.map((t) => `<option value="${t}" ${existing?.type === t ? 'selected' : ''}>${TYPE_META[t].label}</option>`).join('')}</select>`)}
     <div class="field"><label class="checkline"><input type="checkbox" name="cornerstone" ${existing?.cornerstone ? 'checked' : ''}> Cornerstone — a source of wealth, shown at the top of the dashboard</label></div>
+    <div class="field-row">
+      ${field('Liquidity', `<select name="liquidity">${LIQ_ORDER.map((l) => `<option value="${l}" ${(existing ? liquidityOf(existing) : 'liquid') === l ? 'selected' : ''}>${LIQ_META[l].label} — ${LIQ_META[l].step.toLowerCase()}</option>`).join('')}</select>`, 'Liquid: sellable within days. Fixed term: locked but with a known end date. Illiquid: startups & unlisted — money only at an exit.')}
+      ${field('Expected release year', `<input name="maturityYear" type="number" min="2000" max="2100" value="${existing?.maturityYear ?? ''}" placeholder="e.g. 2032">`, 'For fixed-term investments — roughly when the money comes back.')}
+    </div>
     ${field('Ownership %', `<input name="ownershipPct" type="number" step="any" min="0" max="100" value="${existing?.ownershipPct ?? ''}" placeholder="e.g. 2.12">`, 'Optional — for stakes in companies. Lets you value the position from the company’s total valuation.')}
     ${field('Groups', groupChecks(existing?.groupIds || []))}
     ${field('Notes', `<textarea name="notes" placeholder="Anything worth remembering — terms, agreements, links to contract files on the NAS…">${esc(existing?.notes || '')}</textarea>`)}
   `, (d) => {
     const ownershipPct = d.ownershipPct === '' ? null : parseFloat(d.ownershipPct);
+    const maturityYear = parseInt(d.maturityYear, 10);
     const common = {
       name: d.name.trim(), type: d.type, groupIds: d._checked, notes: d.notes,
       cornerstone: d.cornerstone === 'on',
+      liquidity: d.liquidity,
+      maturityYear: isFinite(maturityYear) ? maturityYear : null,
       ownershipPct: isFinite(ownershipPct) && ownershipPct > 0 ? ownershipPct : null,
     };
     if (existing) {
@@ -229,7 +251,7 @@ function contributionForm(invId, existing) {
       ${field('Date', `<input name="date" type="date" required value="${esc(existing?.date || today())}">`)}
       ${field('Amount', `<input name="amount" type="number" step="any" required value="${existing ? esc(existing.amount) : ''}" placeholder="50000">`, 'Positive = money in. Negative = withdrawal / payout.')}
     </div>
-    ${field('Note', `<input name="note" value="${esc(existing?.note || '')}" placeholder="e.g. Q3 top-up via Sopra Advice">`)}
+    ${field('Note', `<input name="note" value="${esc(existing?.note || '')}" placeholder="e.g. Q3 top-up via Torpe Advice">`)}
   `, (d) => {
     const amount = parseFloat(d.amount);
     if (!isFinite(amount)) return false;
@@ -268,6 +290,38 @@ function valuationForm(invId, existing) {
       mutate(() => state.valuations.push({ id: uid(), investmentId: invId, date: d.date, value, note: d.note }));
     }
   });
+}
+
+// One-tap valuation refresh from the portfolio table: either confirm the
+// current value unchanged (records a fresh snapshot dated today) or type a
+// new number — without leaving the dashboard.
+function quickValueForm(inv) {
+  const s = investmentSummary(inv);
+  const basisLine = s.basis === 'cost'
+    ? 'carried at cost — no valuation recorded yet'
+    : `last valued ${fmtDate(s.asOf)}`;
+  openDialog(`Update value — ${inv.name}`, `
+    <p class="quick-current">Current value <b>${fmtMoney(s.value)}</b> · ${esc(basisLine)}</p>
+    <button type="button" class="btn confirm-same" data-confirm-same>✓ Still ${fmtMoney(s.value)} — confirm as of today</button>
+    <div class="quick-divider"><span>or</span></div>
+    <div class="field-row">
+      ${field('New value', `<input name="value" type="number" step="any" placeholder="${Math.round(s.value)}" autofocus>`)}
+      ${field('As of', `<input name="date" type="date" value="${today()}">`)}
+    </div>
+    ${field('Source / note', `<input name="note" placeholder="e.g. bank depot, annual statement">`)}
+  `, (d) => {
+    const value = parseFloat(d.value);
+    if (!isFinite(value)) return false;
+    mutate(() => state.valuations.push({
+      id: uid(), investmentId: inv.id, date: d.date || today(), value, note: d.note,
+    }));
+  }, 'Save new value');
+  document.querySelector('#dialogForm [data-confirm-same]').onclick = () => {
+    mutate(() => state.valuations.push({
+      id: uid(), investmentId: inv.id, date: today(), value: s.value, note: 'Confirmed unchanged',
+    }));
+    document.getElementById('dialog').close();
+  };
 }
 
 // `owner` is any object with a contacts array — an investment or a group.
@@ -311,7 +365,7 @@ function documentForm(inv, existing) {
 
 function groupForm(existing) {
   openDialog(existing ? 'Edit group' : 'New group', `
-    ${field('Name', `<input name="name" required value="${esc(existing?.name || '')}" placeholder="e.g. Sopra Advice">`)}
+    ${field('Name', `<input name="name" required value="${esc(existing?.name || '')}" placeholder="e.g. Torpe Advice">`)}
     ${field('Kind', `<select name="kind">${Object.entries(GROUP_KINDS).map(([k, v]) => `<option value="${k}" ${existing?.kind === k ? 'selected' : ''}>${v}</option>`).join('')}</select>`)}
     ${field('Notes', `<textarea name="notes">${esc(existing?.notes || '')}</textarea>`)}
   `, (d) => {
@@ -356,6 +410,7 @@ function investmentsTable(investments) {
   if (!investments.length) return '<div class="empty">No investments yet. Add the first one to get started.</div>';
   const rows = investments.map((inv) => {
     const s = investmentSummary(inv);
+    const liq = liquidityOf(inv);
     const groups = (inv.groupIds || [])
       .map((gid) => state.groups.find((g) => g.id === gid))
       .filter(Boolean)
@@ -364,26 +419,28 @@ function investmentsTable(investments) {
     return `
       <tr class="rowlink" data-href="#/investment/${esc(inv.id)}">
         <td class="name-cell">${esc(inv.name)}${groups ? `<span class="sub">${groups}</span>` : ''}</td>
-        <td><span class="type-key"><span class="swatch" style="background:${TYPE_META[inv.type]?.color}"></span>${TYPE_META[inv.type]?.icon || ''} ${esc(TYPE_META[inv.type]?.label || inv.type)}</span></td>
+        <td><span class="type-key"><span class="swatch" style="background:${TYPE_META[inv.type]?.color}"></span>${TYPE_META[inv.type]?.icon || ''} ${esc(TYPE_META[inv.type]?.label || inv.type)}</span>
+          <span class="sub liq-sub-${liq}">${esc(LIQ_META[liq].label)}${liq === 'term' && inv.maturityYear ? ` · ~${inv.maturityYear}` : ''}</span></td>
         <td class="num">${fmtMoney(s.contributed)}</td>
         <td class="num">${fmtMoney(s.value)}</td>
         <td>${stalenessBadge(inv.id)}</td>
         <td class="num">${gainCellHtml(s.gain, s.gainPct)}</td>
+        <td class="num"><button class="btn ghost small" data-action="quick-value" data-id="${esc(inv.id)}" title="Confirm or update the value">↻ Value</button></td>
       </tr>`;
   }).join('');
   return `
     <table>
       <thead><tr>
         <th>Investment</th><th>Type</th><th class="num">Paid in (net)</th>
-        <th class="num">Value</th><th>Value as of</th><th class="num">Gain</th>
+        <th class="num">Value</th><th>Value as of</th><th class="num">Gain</th><th></th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>`;
 }
 
-function allocationCard() {
+function allocationCard(investments) {
   const byType = {};
-  for (const inv of state.investments) {
+  for (const inv of investments) {
     const s = investmentSummary(inv);
     byType[inv.type] = (byType[inv.type] || 0) + Math.max(0, s.value);
   }
@@ -392,7 +449,7 @@ function allocationCard() {
   const segs = TYPE_ORDER.filter((t) => byType[t] > 0);
   return `
     <div class="card">
-      <h2>Allocation by type</h2>
+      <h2>Allocation by type — managed portfolio</h2>
       <div class="alloc-bar">
         ${segs.map((t) => `<div class="alloc-seg" style="flex:${byType[t] / total};background:${TYPE_META[t].color}" title="${esc(TYPE_META[t].label)}: ${fmtMoney(byType[t])}"></div>`).join('')}
       </div>
@@ -438,20 +495,48 @@ function cornerstoneCardHtml(inv) {
 }
 
 function viewDashboard() {
-  let contributed = 0, value = 0, sourcesValue = 0, managedValue = 0;
-  for (const inv of state.investments) {
-    const s = investmentSummary(inv);
-    contributed += s.contributed;
-    value += s.value;
-    if (inv.cornerstone) sourcesValue += s.value; else managedValue += s.value;
-  }
-  const gain = value - contributed;
-  const gainPct = contributed > 0 ? (gain / contributed) * 100 : null;
-  const deltaCls = gain > 0 ? 'up' : gain < 0 ? 'down' : 'flat';
-  const staleCount = state.investments.filter((i) => ['warning', 'serious'].includes(staleness(i.id).cls)).length;
-
   const cornerstones = state.investments.filter((i) => i.cornerstone);
   const managed = state.investments.filter((i) => !i.cornerstone);
+
+  // The operational view: only the managed portfolio, split by when the money
+  // could actually be in your hands. Cornerstones (the big hypotheticals) are
+  // kept out of these figures and shown in their own section below.
+  const tiers = { liquid: { value: 0, count: 0 }, term: { value: 0, count: 0 }, illiquid: { value: 0, count: 0 } };
+  let managedValue = 0, managedContributed = 0;
+  const termYears = [];
+  for (const inv of managed) {
+    const s = investmentSummary(inv);
+    const liq = liquidityOf(inv);
+    tiers[liq].value += s.value;
+    tiers[liq].count += 1;
+    managedValue += s.value;
+    managedContributed += s.contributed;
+    if (liq === 'term' && inv.maturityYear) termYears.push(inv.maturityYear);
+  }
+  const managedGain = managedValue - managedContributed;
+
+  let sourcesValue = 0, sourcesContributed = 0;
+  for (const inv of cornerstones) {
+    const s = investmentSummary(inv);
+    sourcesValue += s.value;
+    sourcesContributed += s.contributed;
+  }
+  const totalValue = managedValue + sourcesValue;
+
+  const staleCount = state.investments.filter((i) => ['warning', 'serious'].includes(staleness(i.id).cls)).length;
+
+  const termSub = termYears.length
+    ? (Math.min(...termYears) === Math.max(...termYears)
+      ? `released ~${termYears[0]}`
+      : `released ~${Math.min(...termYears)}–${Math.max(...termYears)}`)
+    : (tiers.term.count ? 'no release years set yet' : 'nothing locked up');
+
+  const positions = (n) => `${n} position${n === 1 ? '' : 's'}`;
+  const barTotal = Math.max(0, tiers.liquid.value) + Math.max(0, tiers.term.value) + Math.max(0, tiers.illiquid.value);
+  const liqBar = barTotal > 0 ? `
+    <div class="liq-bar" aria-hidden="true">
+      ${LIQ_ORDER.filter((l) => tiers[l].value > 0).map((l) => `<div class="liq-seg liq-${l}" style="flex:${tiers[l].value / barTotal}" title="${esc(LIQ_META[l].step)}: ${fmtMoney(tiers[l].value)}"></div>`).join('')}
+    </div>` : '';
 
   const groupCards = state.groups.map((g) => {
     const s = groupSummary(g.id);
@@ -467,27 +552,49 @@ function viewDashboard() {
 
   return `
     <div class="page-head">
-      <div><h1>Dashboard</h1><p class="view-sub">The whole portfolio at a glance.</p></div>
+      <div><h1>Dashboard</h1><p class="view-sub">What you could actually get your hands on — and when.</p></div>
       <button class="btn" data-action="add-investment">+ Add investment</button>
     </div>
-    <div class="tiles">
-      <div class="tile"><div class="tile-label">Total wealth</div><div class="tile-value">${fmtMoney(value)}</div>
-        <div class="tile-delta ${deltaCls}">${gain >= 0 ? '+' : ''}${fmtMoney(gain)}${gainPct !== null ? ` (${gain >= 0 ? '+' : ''}${gainPct.toFixed(1)}%)` : ''} vs paid in</div></div>
-      <div class="tile"><div class="tile-label">Sources of wealth</div><div class="tile-value">${fmtMoney(sourcesValue)}</div>
-        <div class="tile-delta flat">${cornerstones.length} cornerstone${cornerstones.length === 1 ? '' : 's'}</div></div>
-      <div class="tile"><div class="tile-label">Managed portfolio</div><div class="tile-value">${fmtMoney(managedValue)}</div>
-        <div class="tile-delta flat">${managed.length} investment${managed.length === 1 ? '' : 's'}</div></div>
-      <div class="tile"><div class="tile-label">Values needing an update</div><div class="tile-value">${staleCount}</div>
-        <div class="tile-delta flat">${staleCount ? 'valued more than 3 months ago' : 'all values are fresh'}</div></div>
+    <div class="liq-band">
+      <div class="liq-step now">
+        <div class="liq-label">Available now</div>
+        <div class="liq-value">${fmtMoney(tiers.liquid.value)}</div>
+        <div class="liq-sub">cash & liquid investments · ${positions(tiers.liquid.count)}</div>
+      </div>
+      <div class="liq-step term">
+        <div class="liq-label">Locked · known horizon</div>
+        <div class="liq-value">${fmtMoney(tiers.term.value)}</div>
+        <div class="liq-sub">${esc(termSub)} · ${positions(tiers.term.count)}</div>
+      </div>
+      <div class="liq-step exit">
+        <div class="liq-label">Until an exit</div>
+        <div class="liq-value">${fmtMoney(tiers.illiquid.value)}</div>
+        <div class="liq-sub">startups & unlisted, at latest valuation · ${positions(tiers.illiquid.count)}</div>
+      </div>
+    </div>
+    ${liqBar}
+    <div class="liq-foot">
+      <span>Managed portfolio <b>${fmtMoney(managedValue)}</b></span>
+      <span>paid in ${fmtMoney(managedContributed)}</span>
+      <span>${gainCellHtml(managedGain, managedContributed > 0 ? (managedGain / managedContributed) * 100 : null)}</span>
+      ${cornerstones.length ? `<span class="liq-total">total incl. sources of wealth ${fmtMoney(totalValue)}</span>` : ''}
     </div>
     ${cornerstones.length ? `
     <div class="card">
-      <div class="card-head"><h2>Sources of wealth</h2></div>
+      <div class="card-head"><div><h2>Sources of wealth</h2>
+        <p class="card-sub">The big hypotheticals — kept out of the figures above until the day they are realised.</p></div></div>
       <div class="cstone-grid">${cornerstones.map(cornerstoneCardHtml).join('')}</div>
+      <div class="stale-note">Together: ${fmtMoney(sourcesValue)} at latest valuation · paid in ${fmtMoney(sourcesContributed)} · unrealised ${(() => {
+        const g = sourcesValue - sourcesContributed;
+        const ratio = sourcesContributed > 0 ? sourcesValue / sourcesContributed : null;
+        if (ratio && ratio > 10) return `<span class="pos">+${fmtMoney(g)} (${Math.round(ratio)}× paid in)</span>`;
+        return gainCellHtml(g, sourcesContributed > 0 ? (g / sourcesContributed) * 100 : null);
+      })()}</div>
     </div>` : ''}
-    ${allocationCard()}
+    ${allocationCard(managed)}
     <div class="card">
-      <div class="card-head"><h2>Managed portfolio</h2></div>
+      <div class="card-head"><h2>Managed portfolio</h2>
+        ${staleCount ? `<span class="badge warning"><span class="bdot"></span>${staleCount} value${staleCount === 1 ? '' : 's'} need${staleCount === 1 ? 's' : ''} a refresh</span>` : '<span class="badge good"><span class="bdot"></span>all values fresh</span>'}</div>
       ${investmentsTable(managed)}
     </div>
     ${groupCards ? `
@@ -557,6 +664,7 @@ function viewInvestmentDetail(id) {
         <p class="view-sub">
           <span class="type-key"><span class="swatch" style="background:${TYPE_META[inv.type]?.color}"></span>${TYPE_META[inv.type]?.icon || ''} ${esc(TYPE_META[inv.type]?.label || inv.type)}</span>
           ${inv.cornerstone ? '<span class="chip chip-gold">Cornerstone</span>' : ''}
+          <span class="chip">${esc(LIQ_META[liquidityOf(inv)].step)}${liquidityOf(inv) === 'term' && inv.maturityYear ? ` · ~${inv.maturityYear}` : ''}</span>
           ${inv.ownershipPct ? `<span class="chip">${inv.ownershipPct}% ownership</span>` : ''}
           ${groups.map((g) => `<span class="chip">${esc(g.name)}</span>`).join('')}
         </p>
@@ -999,6 +1107,7 @@ function handleAction(action, targetId) {
     'add-contribution': () => contributionForm(id, null),
     'edit-contribution': () => contributionForm(id, state.contributions.find((c) => c.id === targetId)),
     'del-contribution': () => mutate(() => { state.contributions = state.contributions.filter((c) => c.id !== targetId); }),
+    'quick-value': () => quickValueForm(state.investments.find((i) => i.id === targetId)),
     'add-valuation': () => valuationForm(id, null),
     'edit-valuation': () => valuationForm(id, state.valuations.find((v) => v.id === targetId)),
     'del-valuation': () => mutate(() => { state.valuations = state.valuations.filter((v) => v.id !== targetId); }),
