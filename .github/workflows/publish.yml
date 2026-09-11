@@ -1,0 +1,37 @@
+# Builds the GOAT Docker image and publishes it to GitHub Container Registry
+# every time main changes. The NAS (running Watchtower) then picks the new
+# version up automatically — see DEPLOY.md.
+name: Publish Docker image
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # arm64 build needs emulation (covers ARM-based Synology models too)
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/goat:latest
+            ghcr.io/${{ github.repository_owner }}/goat:${{ github.sha }}

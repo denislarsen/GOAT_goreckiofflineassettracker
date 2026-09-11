@@ -54,6 +54,11 @@ Or with Docker (Synology/QNAP container managers work fine):
 docker compose up -d
 ```
 
+For the Synology NAS there is a self-updating setup — GitHub Actions builds
+an image on every push to `main`, and Watchtower on the NAS pulls new
+versions automatically. See **[DEPLOY.md](DEPLOY.md)** for the walkthrough
+(in Danish) and `docker-compose.nas.yml` for the compose file it uses.
+
 Configuration via environment variables: `PORT` (default 8420), `DATA_DIR`
 (default `./data`).
 
