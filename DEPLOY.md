@@ -1,91 +1,108 @@
-# Sådan kører (og opdaterer) GOAT på Synology-NAS'en
+# Sådan får du GOAT til at køre på NAS'en — trin for trin
 
-Dansk walkthrough — engangsopsætning tager ca. 15 minutter, og derefter
-opdaterer NAS'en **sig selv**, hver gang der lander ny kode på `main`.
+Skrevet så det kan følges uden teknisk baggrund. Engangsopsætningen tager
+15–20 minutter. Derefter opdaterer NAS'en sig selv — du skal aldrig gøre
+noget igen.
 
-## Sådan hænger det sammen
+## Hvad sker der egentlig? (30 sekunder)
 
-1. Ny kode merges til `main` på GitHub.
-2. GitHub Actions (`.github/workflows/publish.yml`) bygger automatisk et
-   Docker-image og lægger det på GitHub Container Registry som
-   `ghcr.io/denislarsen/goat:latest`.
-3. På NAS'en kører **Watchtower** ved siden af GOAT. Den tjekker en gang i
-   timen, om der er et nyere image — og hvis ja: henter det, genstarter GOAT
-   med den nye version og rydder det gamle image op.
+- **GitHub** er der, hvor app'ens kode bor.
+- Hver gang koden ændres, pakker en robot hos GitHub automatisk app'en som en
+  **færdigpakke** (et "Docker-image").
+- På NAS'en installerer du app'en én gang ud fra den pakke — plus en lille
+  **vagt** (Watchtower), der hver time kigger efter en ny pakke og installerer
+  den af sig selv.
+- **Dine tal og data er ALDRIG med i pakken.** De ligger i en almindelig mappe
+  på NAS'en (`/volume1/docker/goat/data`) og overlever alle opdateringer.
 
-Dine data røres aldrig: de ligger i `/volume1/docker/goat/data` på NAS'en og
-overlever alle opdateringer (app'en gemmer desuden selv de sidste 30
-versioner i `data/backups/`).
+## Offentlig eller privat pakke — hvad er konsekvensen?
 
-## Engangsopsætning
+Pakken indeholder kun selve app'en: koden, designet, gede-ikonet. Ikke ét
+tal, ikke ét navn fra din portefølje.
 
-### Trin 1 — Aktivér image-bygningen
+| | **Offentlig pakke (anbefalet)** | Privat pakke |
+|---|---|---|
+| Dine investeringsdata | Sikre — er aldrig i pakken | Sikre — er aldrig i pakken |
+| Hvem kan hente selve app'en? | Alle, der kender navnet, kan downloade den tomme app og se, hvordan den er skruet sammen | Kun dig |
+| Besvær | Ét ekstra klik på GitHub | Kræver adgangsnøgle, login på NAS'en via kommandolinje m.m. |
 
-Den kører af sig selv første gang, denne branch merges til `main`. Tjek under
-fanen **Actions** på GitHub-repoet, at "Publish Docker image" bliver grøn.
-(Der skal ikke oprettes nogen secrets — workflowet bruger GitHubs indbyggede
-token.)
+**Anbefaling: offentlig.** Det, en fremmed i værste fald kan se, er en tom
+udgave af app'en — ikke en krone af dine data. Vil du alligevel have privat,
+så følg tillægget nederst.
 
-### Trin 2 — Vælg om imaget skal være privat eller offentligt
+## Trin for trin
 
-Imaget indeholder app'ens kode (men **aldrig** dine data). To muligheder:
+### Del 1 — på GitHub (i browseren)
 
-- **Offentligt image (nemmest):** GitHub → repoet → **Packages** → `goat` →
-  **Package settings** → **Change visibility** → Public. Så kan NAS'en hente
-  det uden login, og du kan springe login-delen i trin 3 over.
-- **Privat image (anbefalet, mest privatliv):** lad det være privat og giv
-  NAS'en adgang med et token:
-  1. GitHub → din profil → **Settings** → **Developer settings** →
-     **Personal access tokens** → **Tokens (classic)** → *Generate new token*.
-     Kryds kun **`read:packages`** af, sæt lang udløbstid, og gem tokenet.
-  2. På NAS'en: **Container Manager** → **Registrering (Registry)** →
-     **Indstillinger** → **Tilføj** → URL `https://ghcr.io`, brugernavn
-     `denislarsen`, adgangskode = tokenet.
-  3. Watchtower skal også kunne logge ind. SSH ind på NAS'en og kør
-     `docker login ghcr.io` (samme brugernavn/token) — og kopiér derefter
-     login-filen til projektmappen:
-     `mkdir -p /volume1/docker/goat/.docker && cp ~/.docker/config.json /volume1/docker/goat/.docker/`
-     (Det er den fil, `docker-compose.nas.yml` binder ind i Watchtower.
-     Kører du med offentligt image, så slet bare den volume-linje.)
+1. **Få koden på `main`.** Koden ligger klar på en arbejdsgren; merg den via
+   pull requesten (den grønne **Merge pull request**-knap), eller bed Claude
+   oprette PR'en, hvis den ikke findes.
+2. **Vent på robotten.** Åbn fanen **Actions** øverst i repoet. Efter et par
+   minutter står der et grønt flueben ved *"Publish Docker image"*. Så ligger
+   pakken klar.
+3. **Gør pakken offentlig.** Gå til repoets forside → i højre spalte, klik
+   **Packages** → klik på **goat** → klik **Package settings** (til højre) →
+   rul helt ned til *Danger Zone* → **Change visibility** → vælg **Public**
+   → bekræft ved at skrive pakkens navn.
 
-### Trin 3 — Opret projektet i Container Manager
+### Del 2 — på NAS'en (i DSM, Synologys webinterface)
 
-1. Opret mappen `/volume1/docker/goat/data` i File Station.
-   *(Flytter du fra en eksisterende installation: kopiér din nuværende
-   `data`-mappe — `goat-data.json` + `backups/` + evt. `documents/` — herind
-   først.)*
-2. **Container Manager** → **Projekt** → **Opret**:
+4. **Opret datamappen.** Åbn **File Station** → gå til mappen `docker` (opret
+   den, hvis den ikke findes) → opret undermappen `goat`, og inde i den
+   undermappen `data`. Resultat: `docker/goat/data`.
+   - *Kun hvis app'en allerede kører et sted med rigtige data:* kopiér den
+     gamle `data`-mappes indhold (`goat-data.json`, `backups`, evt.
+     `documents`) ind i den nye `data`-mappe først.
+5. **Installér app'en.** Åbn **Container Manager** (hedder Docker på ældre
+   DSM) → vælg **Projekt** i venstremenuen → **Opret**:
    - Projektnavn: `goat`
-   - Sti: `/volume1/docker/goat`
-   - Kilde: *Opret docker-compose.yml* → indsæt indholdet af
-     `docker-compose.nas.yml` fra dette repo.
-3. Tryk **Udfør**. Efter et øjeblik kører to containere: `goat` og
-   `goat-watchtower`.
-4. Åbn `http://<NAS-ens-IP>:8420` i en browser — færdig. Tilføj genvejen til
-   iPad-hjemmeskærmen herfra (ikonet følger med automatisk).
+   - Sti: vælg mappen `/docker/goat`
+   - Kilde: **Opret docker-compose.yml** → kopiér hele indholdet af filen
+     [`docker-compose.nas.yml`](docker-compose.nas.yml) fra repoet ind i
+     feltet.
+   - Klik **Næste** / **Udfør** hele vejen igennem.
+6. **Tjek at den kører.** Under **Container** skal der nu stå to grønne:
+   `goat` og `goat-watchtower`.
+7. **Åbn app'en.** I browseren: samme adresse som du bruger til NAS'en, men
+   med `:8420` bagpå — fx `http://192.168.1.50:8420` (NAS'ens IP står i
+   DSM under Kontrolpanel → Netværk, eller i din Synology-app).
 
-## Hverdagen derefter
+### Del 3 — på iPad'en
 
-- **Ingenting.** Watchtower tjekker hver time og ruller nye versioner ud af
-  sig selv. En opdatering giver få sekunders afbrydelse — data er urørt.
-- **Vil du opdatere NU:** Container Manager → Projekt → `goat` → **Handling**
-  → *Genopbyg* (eller via SSH: `docker compose -f docker-compose.nas.yml pull
-  && docker compose -f docker-compose.nas.yml up -d` fra projektmappen).
-- **Rulle tilbage:** hvert image tagges også med commit-hash
-  (`ghcr.io/denislarsen/goat:<sha>`), så du kan pinne en bestemt version i
-  compose-filen, hvis en opdatering driller.
+8. Åbn adressen fra trin 7 i **Safari** → tryk på **Del-knappen** (firkanten
+   med pil op) → **Føj til hjemmeskærm**. Genvejen får automatisk det grønne
+   G-med-horn-ikon. *(Har du en gammel genvej liggende: slet den og lav en
+   ny — iPad'en husker ellers det gamle ikon.)*
 
-## Plan B — uden Docker
+## Det var det
 
-App'en er ren Node uden npm-pakker, så den kan også køre direkte:
+- Opdateringer sker nu automatisk inden for en time, efter ny kode er merget
+  til `main`. Du mærker det højst som et par sekunders genstart.
+- **Utålmodig?** Container Manager → Projekt → `goat` → menuen **Handling**
+  → *Genopbyg* henter nyeste version med det samme.
+- **Noget gik i stykker efter en opdatering?** Hver pakke gemmes også under
+  et versionsnummer (commit-hash). Skriv til Claude, hvilken dato det gik
+  galt, så låser vi compose-filen til den forrige version.
 
-1. Installér **Node.js v20+** fra Synology Package Center.
-2. Læg repoet i `/volume1/docker/goat-src` (fx via `git clone`).
-3. **Kontrolpanel** → **Opgaveplanlægning** → *Udløst opgave* (ved opstart):
-   `cd /volume1/docker/goat-src && DATA_DIR=/volume1/docker/goat/data PORT=8420 node server.js`
-4. Automatiske opdateringer: endnu en planlagt opgave (fx dagligt kl. 04):
-   `cd /volume1/docker/goat-src && git pull && synoschedtask --run <opstartsopgavens-id>`
-   — men Docker-vejen ovenfor er mere robust og anbefales.
+> Sikkerhed: app'en har intet login, så lad den blive på hjemmenetværket.
+> Åbn ikke port 8420 i din router. Det er hele privatlivs-idéen: intet på
+> internettet, alt på NAS'en.
 
-> Som altid: app'en har intet login, så lad port 8420 blive på hjemmenetværket
-> — åbn den ikke i routeren.
+---
+
+## Tillæg — hvis pakken skal være privat
+
+Kun for den grundige: spring trin 3 over og gør i stedet dette.
+
+1. På GitHub: profilbillede → **Settings** → **Developer settings** →
+   **Personal access tokens** → **Tokens (classic)** → *Generate new token*.
+   Kryds kun **`read:packages`** af, sæt lang udløbstid, kopiér tokenet
+   (det er en slags adgangskode — gem det).
+2. I Container Manager: **Registrering** → **Indstillinger** → **Tilføj** →
+   URL `https://ghcr.io`, brugernavn `denislarsen`, adgangskode = tokenet.
+3. Watchtower skal også kunne logge ind: slå SSH til (Kontrolpanel →
+   Terminal & SNMP), log ind fra en computer (`ssh dig@NAS-IP`) og kør
+   `docker login ghcr.io` med samme brugernavn/token. Kør derefter:
+   `mkdir -p /volume1/docker/goat/.docker && cp ~/.docker/config.json /volume1/docker/goat/.docker/`
+4. Fjern `#` foran config.json-linjen i compose-filen (se kommentaren i
+   `docker-compose.nas.yml`) og genopbyg projektet.
