@@ -7,6 +7,7 @@ const http = require('http');
 const fs = require('fs');
 const fsp = require('fs/promises');
 const path = require('path');
+const { createPriceService } = require('./prices');
 
 const PORT = parseInt(process.env.PORT || '8420', 10);
 const HOST = process.env.HOST || '0.0.0.0';
@@ -119,7 +120,40 @@ function readBody(req) {
 // Serialize writes so two overlapping saves can't interleave.
 let writeChain = Promise.resolve();
 
+const prices = createPriceService({ dataDir: DATA_DIR, readState: () => readState() });
+
+async function readJsonBody(req) {
+  const raw = await readBody(req);
+  return raw ? JSON.parse(raw) : {};
+}
+
 async function handleApi(req, res, url) {
+  // ---- fund prices (kept in prices.json, separate from the main data) ----
+  if (url.pathname === '/api/prices' && req.method === 'GET') {
+    return sendJson(res, 200, await prices.loadPrices());
+  }
+  if (url.pathname === '/api/prices/refresh' && req.method === 'POST') {
+    let body = {};
+    try { body = await readJsonBody(req); } catch { /* empty body is fine */ }
+    const only = Array.isArray(body.isins) && body.isins.length ? body.isins : null;
+    return sendJson(res, 200, await prices.refresh(only));
+  }
+  if (url.pathname === '/api/prices/test' && req.method === 'GET') {
+    const isin = url.searchParams.get('isin');
+    if (url.searchParams.get('all')) return sendJson(res, 200, await prices.testAll(isin));
+    return sendJson(res, 200, await prices.test(isin));
+  }
+  if (url.pathname === '/api/price-settings' && req.method === 'GET') {
+    return sendJson(res, 200, await prices.publicSettings());
+  }
+  if (url.pathname === '/api/price-settings' && req.method === 'PUT') {
+    let body;
+    try { body = await readJsonBody(req); } catch (err) {
+      return sendJson(res, 400, { error: 'invalid JSON: ' + err.message });
+    }
+    return sendJson(res, 200, await prices.updateSettings(body));
+  }
+
   if (url.pathname === '/api/data' && req.method === 'GET') {
     const state = await readState();
     return sendJson(res, 200, state);
@@ -207,6 +241,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 ensureDataDirs();
+if (process.env.PRICE_REFRESH !== 'off') prices.startSchedule();
 server.listen(PORT, HOST, () => {
   console.log(`GOAT running at http://${HOST}:${PORT}  (data: ${DATA_FILE})`);
 });

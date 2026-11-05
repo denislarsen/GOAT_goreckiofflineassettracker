@@ -875,3 +875,21 @@ body.in-garden .view { max-width: none; padding: 0; }
   .sidebar-foot { margin-top: 0; margin-left: auto; }
   .view { padding: 18px 14px 50px; }
 }
+
+/* ---------- fund prices ---------- */
+.meta { color: var(--ink-muted); font-size: 0.8rem; }
+.price-status {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+  font-size: 0.82rem; color: var(--ink-2);
+  padding: 0 0 10px; margin-bottom: 12px; border-bottom: 1px solid var(--grid);
+}
+.price-status > span { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.isin-row { display: flex; gap: 8px; align-items: center; }
+.isin-row input { flex: 1; min-width: 0; font-variant-numeric: tabular-nums; letter-spacing: 0.03em; }
+.isin-result { font-size: 0.84rem; margin-top: 6px; line-height: 1.45; }
+.isin-result:empty { display: none; }
+.isin-ok { color: var(--ink); }
+.isin-ok::first-letter { color: var(--delta-good); }
+.price-card .price-line { font-size: 0.88rem; margin: 6px 0; line-height: 1.45; }
+.price-card .price-line b { font-variant-numeric: tabular-nums; }
+[hidden] { display: none !important; }

@@ -59,6 +59,17 @@ an image on every push to `main`, and Watchtower on the NAS pulls new
 versions automatically. See **[DEPLOY.md](DEPLOY.md)** for the walkthrough
 (in Danish) and `docker-compose.nas.yml` for the compose file it uses.
 
+**Fund prices.** Give a fund its ISIN code and its value follows the fund's
+price from the latest manual valuation onwards. Prices come from Nasdaq Nordic
+(Danish funds) and Yahoo Finance (international), with no token needed, and
+are converted to the portfolio currency. They are fetched once a day in the
+evening and with the "↻ Update prices" button, and stored in
+`data/prices.json`. If a price can't be fetched, the last known one is used.
+Sources live in `prices.js` and are interchangeable; a token-based source
+(EODHD) can be switched on under Settings, with the token kept only in
+`data/price-settings.json` on the NAS. Only ISIN codes are sent to the price
+sources. Set `PRICE_REFRESH=off` to disable the daily fetch.
+
 Configuration via environment variables: `PORT` (default 8420), `DATA_DIR`
 (default `./data`).
 
