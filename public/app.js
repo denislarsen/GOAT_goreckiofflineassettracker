@@ -429,13 +429,13 @@ function investmentsTable(investments) {
       </tr>`;
   }).join('');
   return `
-    <table>
+    <div class="table-wrap"><table>
       <thead><tr>
         <th>Investment</th><th>Type</th><th class="num">Paid in (net)</th>
         <th class="num">Value</th><th>Value as of</th><th class="num">Gain</th><th></th>
       </tr></thead>
       <tbody>${rows}</tbody>
-    </table>`;
+    </table></div>`;
 }
 
 function allocationCard(investments) {
@@ -600,10 +600,10 @@ function viewDashboard() {
     ${groupCards ? `
     <div class="card">
       <div class="card-head"><h2>Groups</h2></div>
-      <table>
+      <div class="table-wrap"><table>
         <thead><tr><th>Group</th><th class="num">Paid in (net)</th><th class="num">Value</th><th class="num">Gain</th></tr></thead>
         <tbody>${groupCards}</tbody>
-      </table>
+      </table></div>
     </div>` : ''}
     <a class="secret-shoe" href="#/closet" title="ssshh…">👠</a>
     <a class="secret-owl" href="#/garden" title="hoo…">🦉</a>`;
@@ -721,10 +721,10 @@ function viewGroups() {
     </div>
     <div class="card">
       ${state.groups.length ? `
-      <table>
+      <div class="table-wrap"><table>
         <thead><tr><th>Group</th><th class="num">Investments</th><th class="num">Paid in (net)</th><th class="num">Value</th><th class="num">Gain</th></tr></thead>
         <tbody>${rows}</tbody>
-      </table>` : '<div class="empty">No groups yet. Create one — for example your advisor — then tag investments with it.</div>'}
+      </table></div>` : '<div class="empty">No groups yet. Create one — for example your advisor — then tag investments with it.</div>'}
     </div>`;
 }
 

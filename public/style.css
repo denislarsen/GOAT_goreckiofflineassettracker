@@ -93,7 +93,9 @@ body {
 .save-status.error { color: var(--delta-bad); }
 
 /* ---- main view ---- */
-.view { flex: 1; padding: 26px 30px 60px; max-width: 1060px; }
+.view { flex: 1; min-width: 0; padding: 26px 30px 60px; max-width: 1060px; }
+/* Wide tables scroll inside their card instead of dragging the whole page sideways. */
+.table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .view h1 { font-family: var(--display); font-size: 1.55rem; font-weight: 500; letter-spacing: -0.01em; margin: 0 0 4px; }
 .view-sub { color: var(--ink-2); margin: 0 0 22px; font-size: 0.9rem; }
 .page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
@@ -865,7 +867,8 @@ body.in-garden .view { max-width: none; padding: 0; }
   margin-bottom: 12px;
 }
 
-@media (max-width: 700px) {
+/* Up to iPad-portrait width the sidebar becomes a top bar, giving tables the full width. */
+@media (max-width: 900px) {
   .layout { flex-direction: column; }
   .sidebar { width: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; border-right: none; border-bottom: 1px solid var(--grid); padding: 12px 14px; }
   .brand { margin-bottom: 0; margin-right: 8px; }
