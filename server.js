@@ -35,7 +35,7 @@ const MIME = {
 
 const EMPTY_STATE = {
   rev: 0,
-  settings: { currency: 'DKK' },
+  settings: { currency: 'EUR' },
   groups: [],
   investments: [],
   contributions: [],
@@ -140,8 +140,9 @@ async function handleApi(req, res, url) {
   }
   if (url.pathname === '/api/prices/test' && req.method === 'GET') {
     const isin = url.searchParams.get('isin');
-    if (url.searchParams.get('all')) return sendJson(res, 200, await prices.testAll(isin));
-    return sendJson(res, 200, await prices.test(isin));
+    const ticker = url.searchParams.get('ticker') || '';
+    if (url.searchParams.get('all')) return sendJson(res, 200, await prices.testAll(isin, ticker));
+    return sendJson(res, 200, await prices.test(isin, ticker));
   }
   if (url.pathname === '/api/price-settings' && req.method === 'GET') {
     return sendJson(res, 200, await prices.publicSettings());

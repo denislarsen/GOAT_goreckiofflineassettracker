@@ -50,10 +50,12 @@ function esc(s) {
   }[c]));
 }
 
+// Everything in GOAT is in euro.
+const CURRENCY = 'EUR';
+
 function fmtMoney(n) {
-  const cur = state?.settings?.currency || 'DKK';
   return new Intl.NumberFormat('da-DK', {
-    style: 'currency', currency: cur, maximumFractionDigits: 0,
+    style: 'currency', currency: CURRENCY, maximumFractionDigits: 0,
   }).format(n);
 }
 
@@ -136,7 +138,9 @@ function normIsin(s) {
 
 function priceEntryFor(inv) {
   const isin = inv && normIsin(inv.isin);
-  return isin ? prices.entries?.[isin] || null : null;
+  const pe = isin ? prices.entries?.[isin] : null;
+  // Only use prices expressed in euro (older cached prices may not be).
+  return pe && pe.currency === CURRENCY ? pe : null;
 }
 
 // Closing price on `date`, or the last one before it (weekends/holidays).
@@ -163,7 +167,7 @@ function priceFailing(pe) {
 }
 
 function fmtPrice(n, cur) {
-  return new Intl.NumberFormat('da-DK', { style: 'currency', currency: cur || 'DKK', maximumFractionDigits: 2 }).format(n);
+  return new Intl.NumberFormat('da-DK', { style: 'currency', currency: cur || CURRENCY, maximumFractionDigits: 2 }).format(n);
 }
 
 function fmtDateTime(iso) {
@@ -226,7 +230,8 @@ function staleness(invId) {
   if (cv.basis === 'price') {
     const short = new Date(cv.asOf + 'T00:00:00').toLocaleDateString('da-DK', { day: 'numeric', month: 'short' });
     if (priceFailing(cv.priceEntry)) return { cls: 'warning', label: `Price ${short} · update failed` };
-    return daysSince(cv.asOf) <= 5
+    // Some funds (e.g. cat bond funds) only publish a price weekly.
+    return daysSince(cv.asOf) <= 10
       ? { cls: 'good', label: `Price ${short}` }
       : { cls: 'warning', label: `Price ${short}` };
   }
@@ -342,13 +347,14 @@ function investmentForm(existing) {
       ${field('Expected release year', `<input name="maturityYear" type="number" min="2000" max="2100" value="${existing?.maturityYear ?? ''}" placeholder="e.g. 2032">`, 'For fixed-term investments — roughly when the money comes back.')}
     </div>
     <div class="field isin-field" ${(existing?.type || 'fund') === 'fund' ? '' : 'hidden'}>
-      <label>Fund code (ISIN)</label>
+      <label>Fund code (ISIN) · ticker</label>
       <div class="isin-row">
-        <input name="isin" value="${esc(existing?.isin || '')}" placeholder="e.g. DK0060747905" autocapitalize="characters" autocomplete="off" spellcheck="false">
+        <input name="isin" value="${esc(existing?.isin || '')}" placeholder="e.g. IE00BF4RFH31" autocapitalize="characters" autocomplete="off" spellcheck="false">
+        <input name="ticker" class="ticker-input" value="${esc(existing?.ticker || '')}" placeholder="Ticker" aria-label="Ticker (optional)" autocapitalize="characters" autocomplete="off" spellcheck="false">
         <button type="button" class="btn ghost small" data-test-isin>Test code</button>
       </div>
       <div class="isin-result" aria-live="polite"></div>
-      <div class="hint">Optional. With a code, the value follows the fund's price from your latest valuation onwards. Prices are fetched once a day.</div>
+      <div class="hint">Optional. With a code, the value follows the fund's price from your latest valuation onwards. Prices are fetched once a day. Ticker (optional, from the bank statement, e.g. IUSN) helps find the listing in euro.</div>
     </div>
     ${field('Ownership %', `<input name="ownershipPct" type="number" step="any" min="0" max="100" value="${existing?.ownershipPct ?? ''}" placeholder="e.g. 2.12">`, 'Optional — for stakes in companies. Lets you value the position from the company’s total valuation.')}
     ${field('Groups', groupChecks(existing?.groupIds || []))}
@@ -363,8 +369,10 @@ function investmentForm(existing) {
       maturityYear: isFinite(maturityYear) ? maturityYear : null,
       ownershipPct: isFinite(ownershipPct) && ownershipPct > 0 ? ownershipPct : null,
       isin: d.type === 'fund' && normIsin(d.isin) ? normIsin(d.isin) : null,
+      ticker: d.type === 'fund' && normIsin(d.isin) && d.ticker.trim() ? d.ticker.trim().toUpperCase() : null,
     };
-    const newIsin = common.isin && common.isin !== existing?.isin && !prices.entries?.[common.isin];
+    const newIsin = common.isin && (common.isin !== existing?.isin || common.ticker !== (existing?.ticker || null)
+      || !priceEntryFor({ isin: common.isin }));
     const after = () => { if (newIsin) refreshPrices([common.isin]); };
     if (existing) {
       Object.assign(existing, common);
@@ -388,11 +396,12 @@ function wireIsinField() {
   const out = box.querySelector('.isin-result');
   box.querySelector('[data-test-isin]').onclick = async () => {
     const isin = normIsin(box.querySelector('input[name=isin]').value);
+    const ticker = box.querySelector('input[name=ticker]').value.trim();
     if (!isin) { out.innerHTML = '<span class="neg">Type a code first.</span>'; return; }
     out.innerHTML = '<span class="meta">Looking it up…</span>';
     try {
-      const r = await (await fetch('/api/prices/test?isin=' + encodeURIComponent(isin))).json();
-      const base = state.settings.currency || 'DKK';
+      const r = await (await fetch('/api/prices/test?isin=' + encodeURIComponent(isin) + '&ticker=' + encodeURIComponent(ticker))).json();
+      const base = CURRENCY;
       out.innerHTML = r.ok
         ? `<div class="isin-ok">✓ <b>${esc(r.name)}</b><br>
              ${fmtPrice(r.price, r.currency && r.currency !== 'GBp' ? r.currency : undefined)}${r.currency === 'GBp' ? ' (pence)' : ''} · price from ${fmtDate(r.priceDate)} · via ${esc(r.providerLabel)}
@@ -961,12 +970,7 @@ function viewSettings() {
     <p class="view-sub">Data lives in <code>data/goat-data.json</code> next to the server — nothing leaves your NAS. The only exception: to fetch prices, the server sends your funds' codes (ISIN) to the price source — never names or amounts.</p>
     <div class="card">
       <h2>Currency</h2>
-      <div class="field" style="max-width:220px">
-        <select id="currencySelect">
-          ${['DKK', 'EUR', 'USD', 'SEK', 'NOK', 'GBP'].map((c) => `<option ${state.settings.currency === c ? 'selected' : ''}>${c}</option>`).join('')}
-        </select>
-        <div class="hint">Used for display everywhere. Amounts are stored as plain numbers.</div>
-      </div>
+      <p class="view-sub">All amounts are in <b>euro (EUR)</b>. Fund prices quoted in other currencies are converted to euro with the day's exchange rate.</p>
     </div>
     <div class="card" id="priceSettings">
       <h2>Fund prices</h2>
@@ -1374,13 +1378,6 @@ document.addEventListener('click', (e) => {
   }
   const row = e.target.closest('tr[data-href]');
   if (row) location.hash = row.dataset.href;
-});
-
-document.addEventListener('change', (e) => {
-  if (e.target.id === 'currencySelect') {
-    // Prices are stored in the portfolio currency, so fetch them again.
-    mutate(() => { state.settings.currency = e.target.value; }).then(() => refreshPrices());
-  }
 });
 
 // ----- Settings: price source and token (the token stays on the server) -----

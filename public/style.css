@@ -884,8 +884,8 @@ body.in-garden .view { max-width: none; padding: 0; }
   padding: 0 0 10px; margin-bottom: 12px; border-bottom: 1px solid var(--grid);
 }
 .price-status > span { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.isin-row { display: flex; gap: 8px; align-items: center; }
-.isin-row input { flex: 1; min-width: 0; font-variant-numeric: tabular-nums; letter-spacing: 0.03em; }
+.isin-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.isin-row input { flex: 1 1 150px; min-width: 0; font-variant-numeric: tabular-nums; letter-spacing: 0.03em; }
 .isin-result { font-size: 0.84rem; margin-top: 6px; line-height: 1.45; }
 .isin-result:empty { display: none; }
 .isin-ok { color: var(--ink); }
@@ -893,3 +893,4 @@ body.in-garden .view { max-width: none; padding: 0; }
 .price-card .price-line { font-size: 0.88rem; margin: 6px 0; line-height: 1.45; }
 .price-card .price-line b { font-variant-numeric: tabular-nums; }
 [hidden] { display: none !important; }
+.isin-row .ticker-input { flex: 0 1 88px; }

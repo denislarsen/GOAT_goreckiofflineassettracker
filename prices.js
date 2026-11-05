@@ -3,7 +3,9 @@
 // DATA_DIR/prices.json and refreshes it once a day (and on demand).
 //
 // Price sources are interchangeable "providers". Each one knows how to:
-//   resolve(isin, token)          -> { ref, name, currency, symbol }  (or throws)
+//   resolve(isin, token, opts)    -> { ref, name, currency, symbol }  (or throws)
+//     opts.ticker: optional ticker from the bank statement (e.g. "IUSN")
+//     opts.prefer: the currency we would like the price in (EUR)
 //   history(ref, fromDate, token) -> [[ 'YYYY-MM-DD', close ], ...]  (oldest first)
 // Add a new source by adding an entry to PROVIDERS. Tokens never live in the
 // code: they are typed into Settings and kept in DATA_DIR/price-settings.json
@@ -13,6 +15,10 @@ const fsp = require('fs/promises');
 const path = require('path');
 
 const UA = 'Mozilla/5.0 (GOAT asset tracker)';
+// Every value in GOAT is in euro; prices are converted to this.
+const BASE = 'EUR';
+// Yahoo exchange suffixes that quote in euro, best first (Xetra, then others).
+const EUR_SUFFIXES = ['DE', 'MI', 'PA', 'AS', 'F'];
 const TIMEOUT_MS = 20000;
 
 async function getJson(url) {
@@ -83,19 +89,58 @@ const PROVIDERS = {
     label: 'Yahoo Finance',
     needsToken: false,
     note: 'International funds and ETFs. No token needed, but unofficial.',
-    async resolve(isin) {
-      const json = await getJson(`https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(isin)}&quotesCount=5&newsCount=0`);
-      const quote = (json?.quotes || []).find((q) => q.symbol && q.isYahooFinance !== false);
-      if (!quote) throw new Error('not found');
-      // Currency comes from the chart call; fetch a few days to fill it in.
-      const chart = await getJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(quote.symbol)}?range=5d&interval=1d`);
-      const meta = chart?.chart?.result?.[0]?.meta || {};
-      return {
-        ref: { symbol: quote.symbol },
-        name: meta.longName || quote.longname || quote.shortname || quote.symbol,
-        currency: meta.currency || null,
-        symbol: quote.symbol,
+    // Many ETFs are listed on several exchanges in different currencies, and
+    // a search by ISIN often returns only one of them (e.g. London, in USD).
+    // So we also try the same ticker on euro exchanges, and the ticker from
+    // the bank statement if one was given, and prefer a listing in euro.
+    async resolve(isin, token, opts = {}) {
+      const tried = new Set();
+      let fallback = null;
+      const check = async (symbol, mustMatchName) => {
+        if (!symbol || tried.has(symbol)) return null;
+        tried.add(symbol);
+        try {
+          const chart = await getJson(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}?range=5d&interval=1d`);
+          const meta = chart?.chart?.result?.[0]?.meta;
+          if (!meta || !meta.regularMarketPrice) return null;
+          const name = meta.longName || meta.shortName || symbol;
+          if (mustMatchName && firstWord(name) !== firstWord(mustMatchName)) return null;
+          const hit = { ref: { symbol }, name, currency: meta.currency || null, symbol };
+          if (!fallback) fallback = hit;
+          return hit.currency === opts.prefer ? hit : null;
+        } catch { return null; }
       };
+      const withSuffixes = async (root, mustMatchName) => {
+        for (const sfx of EUR_SUFFIXES) {
+          const hit = await check(`${root}.${sfx}`, mustMatchName);
+          if (hit) return hit;
+        }
+        return null;
+      };
+
+      // 1) What a search for the ISIN finds directly, if it is in euro.
+      const json = await getJson(`https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(isin)}&quotesCount=5&newsCount=0`);
+      const quotes = (json?.quotes || []).filter((q) => q.symbol && q.isYahooFinance !== false);
+      for (const q of quotes) {
+        const hit = await check(q.symbol);
+        if (hit) return hit;
+      }
+      // 2) The ticker from the bank statement, on a euro exchange.
+      const ticker = String(opts.ticker || '').trim().toUpperCase();
+      if (ticker) {
+        const hit = ticker.includes('.') ? await check(ticker) : await withSuffixes(ticker);
+        if (hit) return hit;
+      }
+      // 3) The found ticker on a euro exchange — only if clearly the same fund.
+      for (const q of quotes) {
+        const root = q.symbol.split('.')[0];
+        if (!root.startsWith('0P')) {
+          const alt = await withSuffixes(root, q.longname || q.shortname);
+          if (alt) return alt;
+        }
+      }
+      if (fallback) return fallback;
+      throw new Error('not found');
     },
     async history(ref, from) {
       const p1 = Math.floor(new Date(from + 'T00:00:00Z').getTime() / 1000);
@@ -165,6 +210,10 @@ async function toBaseCurrency(history, currency, base) {
   return { history: out, currency: base, converted: true };
 }
 
+function firstWord(name) {
+  return String(name || '').trim().split(/[\s(-]+/)[0].toLowerCase();
+}
+
 // "auto" tries the token-free sources in this order.
 const AUTO_ORDER = ['nasdaq', 'yahoo'];
 
@@ -196,22 +245,28 @@ function createPriceService({ dataDir, readState }) {
 
   // Find the fund with the first provider that knows it. Returns the result
   // plus a list of what each provider said (for the "Test code" button).
-  async function lookup(isin, settings, from) {
+  // A source that has the fund in euro wins; otherwise the first source that
+  // has it at all (its price is then converted to euro).
+  async function lookup(isin, settings, from, opts = {}) {
     const tried = [];
+    let fallback = null;
     for (const id of providerOrder(settings)) {
       const p = PROVIDERS[id];
       const token = settings.tokens?.[id];
       if (p.needsToken && !token) { tried.push({ provider: id, error: 'no token set' }); continue; }
       try {
-        const info = await p.resolve(isin, token);
+        const info = await p.resolve(isin, token, { ticker: opts.ticker, prefer: BASE });
         const history = await p.history(info.ref, from, token);
         if (!history.length) throw new Error('found, but no prices');
-        tried.push({ provider: id, ok: true });
-        return { provider: id, ...info, history, tried };
+        tried.push({ provider: id, ok: true, currency: info.currency });
+        const result = { provider: id, ...info, history, tried };
+        if (info.currency === BASE) return result;
+        if (!fallback) fallback = result;
       } catch (err) {
         tried.push({ provider: id, error: err.message });
       }
     }
+    if (fallback) return fallback;
     const e = new Error(tried.map((t) => `${PROVIDERS[t.provider].label}: ${t.error}`).join(' · '));
     e.tried = tried;
     throw e;
@@ -222,6 +277,7 @@ function createPriceService({ dataDir, readState }) {
   // slack for weekends/holidays, and at least a year back for context.
   function neededFrom(state) {
     const out = {};
+    const tickers = {};
     const yearAgo = isoDay(new Date(Date.now() - 365 * 86400000));
     for (const inv of state.investments || []) {
       const isin = normIsin(inv.isin);
@@ -231,8 +287,9 @@ function createPriceService({ dataDir, readState }) {
       const from = isoDay(new Date(new Date(anchor + 'T00:00:00Z').getTime() - 7 * 86400000));
       const min = from < yearAgo ? from : yearAgo;
       out[isin] = out[isin] && out[isin] < min ? out[isin] : min;
+      if (inv.ticker) tickers[isin] = String(inv.ticker).trim();
     }
-    return out;
+    return { from: out, tickers };
   }
 
   let running = null;
@@ -243,14 +300,14 @@ function createPriceService({ dataDir, readState }) {
     if (running) return running;
     running = (async () => {
       const [state, settings, prices] = await Promise.all([readState(), loadSettings(), loadPrices()]);
-      const needed = neededFrom(state);
-      const base = state.settings?.currency || 'DKK';
+      const { from: needed, tickers } = neededFrom(state);
+      const base = BASE;
       const isins = Object.keys(needed).filter((i) => !only || only.includes(i));
       const now = new Date().toISOString();
       for (const isin of isins) {
         const old = prices.entries[isin] || { isin };
         try {
-          const r = await lookup(isin, settings, needed[isin]);
+          const r = await lookup(isin, settings, needed[isin], { ticker: tickers[isin] });
           const nativeLast = r.history[r.history.length - 1];
           const conv = await toBaseCurrency(r.history, r.currency, base);
           const last = conv.history[conv.history.length - 1];
@@ -279,13 +336,13 @@ function createPriceService({ dataDir, readState }) {
     return running;
   }
 
-  async function test(isin) {
+  async function test(isin, ticker) {
     isin = normIsin(isin);
     if (!isin) return { ok: false, error: 'That is not a valid ISIN (12 characters, e.g. DK0060747905).' };
     const settings = await loadSettings();
     const from = isoDay(new Date(Date.now() - 14 * 86400000));
     try {
-      const r = await lookup(isin, settings, from);
+      const r = await lookup(isin, settings, from, { ticker });
       const last = r.history[r.history.length - 1];
       return {
         ok: true, isin, provider: r.provider, providerLabel: PROVIDERS[r.provider].label,
@@ -297,14 +354,14 @@ function createPriceService({ dataDir, readState }) {
   }
 
   // For checking coverage: ask every provider separately.
-  async function testAll(isin) {
+  async function testAll(isin, ticker) {
     isin = normIsin(isin);
     const settings = await loadSettings();
     const from = isoDay(new Date(Date.now() - 14 * 86400000));
     const results = {};
     for (const id of Object.keys(PROVIDERS)) {
       try {
-        const r = await lookup(isin, { ...settings, source: id }, from);
+        const r = await lookup(isin, { ...settings, source: id }, from, { ticker });
         const last = r.history[r.history.length - 1];
         results[id] = { ok: true, name: r.name, currency: r.currency, symbol: r.symbol, price: last[1], priceDate: last[0] };
       } catch (err) {

@@ -62,7 +62,8 @@ versions automatically. See **[DEPLOY.md](DEPLOY.md)** for the walkthrough
 **Fund prices.** Give a fund its ISIN code and its value follows the fund's
 price from the latest manual valuation onwards. Prices come from Nasdaq Nordic
 (Danish funds) and Yahoo Finance (international), with no token needed, and
-are converted to the portfolio currency. They are fetched once a day in the
+are converted to euro (all values in GOAT are in EUR). An optional ticker from
+the bank statement helps pick the euro listing of an ETF. They are fetched once a day in the
 evening and with the "↻ Update prices" button, and stored in
 `data/prices.json`. If a price can't be fetched, the last known one is used.
 Sources live in `prices.js` and are interchangeable; a token-based source
