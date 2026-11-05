@@ -44,6 +44,9 @@ så følg tillægget nederst.
    **Packages** → klik på **goat** → klik **Package settings** (til højre) →
    rul helt ned til *Danger Zone* → **Change visibility** → vælg **Public**
    → bekræft ved at skrive pakkens navn.
+   *(Står der ingen **Packages** i højre spalte, så klik på dit profilbillede
+   øverst til højre → **Your profile** → fanen **Packages** — pakken ligger
+   også dér.)*
 
 ### Del 2 — på NAS'en (i DSM, Synologys webinterface)
 

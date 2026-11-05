@@ -35,3 +35,6 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository_owner }}/goat:latest
             ghcr.io/${{ github.repository_owner }}/goat:${{ github.sha }}
+          # Links the package to this repo, so it shows under "Packages" on the repo page.
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
