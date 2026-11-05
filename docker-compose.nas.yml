@@ -8,10 +8,10 @@ services:
     ports:
       - "8420:8420"
     volumes:
-      # All data lives in the "data" folder inside the project folder on the
-      # NAS — survives every update. Relative, so updating an existing
-      # project in place keeps using the data it already has.
-      - ./data:/data
+      # The real data lives in this folder on the NAS and survives every
+      # update. Keep this ABSOLUTE path: the project folder itself lives
+      # elsewhere, so "./data" would point at an empty folder.
+      - /volume1/docker/Gorecki/data:/data
     restart: unless-stopped
     labels:
       - "com.centurylinklabs.watchtower.enable=true"
@@ -23,7 +23,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       # If you keep the ghcr.io package PRIVATE, uncomment this line after
       # running `docker login ghcr.io` on the NAS (see DEPLOY.md appendix):
-      # - ./.docker/config.json:/config.json:ro
+      # - /volume1/docker/Gorecki/.docker/config.json:/config.json:ro
     environment:
       - WATCHTOWER_CLEANUP=true          # remove superseded images
       - WATCHTOWER_POLL_INTERVAL=3600    # check for a new version every hour
