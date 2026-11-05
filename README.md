@@ -17,10 +17,24 @@ no external APIs, no accounts: one Node process and one JSON file.
   valuation plus any money moved in/out since, and shows a freshness badge
   (fresh / months old / years old) so you always know how trustworthy the
   number is. Positions with no valuation yet are carried at cost.
-- **Groups** — tag investments with an advisor (e.g. "Sopra Advice"), a theme,
+- **Groups** — tag investments with an advisor (e.g. "Torpe Advice"), a theme,
   or anything else, and see paid-in vs. value vs. gain per group.
-- **Dashboard** — portfolio value, net paid in, gain, allocation by type, and
+- **Liquidity tiers** — every investment is *liquid* (sellable within days),
+  *fixed term* (locked, but with a known release year — e.g. an 8-year
+  alternatives fund), or *illiquid* (startups & unlisted: money only at an
+  exit). The dashboard leads with what you could actually get your hands on.
+- **Dashboard** — a liquidity staircase (available now / locked with a known
+  horizon / until an exit) for the managed portfolio, with cornerstone
+  positions shown separately as "sources of wealth" so one big hypothetical
+  valuation doesn't drown the operational numbers. Plus allocation by type and
   which valuations need updating.
+- **One-tap value refresh** — an "↻ Value" button on every portfolio row:
+  confirm the current value unchanged as of today, or type the new number,
+  without leaving the dashboard.
+- **Home-screen icon** — served with `apple-touch-icon` and a web manifest, so
+  "Add to Home Screen" on an iPad/iPhone (or Android) gets a proper GOAT icon.
+  If you saved a shortcut before this existed, remove it and add it again to
+  pick up the icon.
 - **Safety** — every save keeps the last 30 versions in `data/backups/`, plus
   one-click JSON export/import from Settings.
 
@@ -39,6 +53,11 @@ Or with Docker (Synology/QNAP container managers work fine):
 ```
 docker compose up -d
 ```
+
+For the Synology NAS there is a self-updating setup — GitHub Actions builds
+an image on every push to `main`, and Watchtower on the NAS pulls new
+versions automatically. See **[DEPLOY.md](DEPLOY.md)** for the walkthrough
+(in Danish) and `docker-compose.nas.yml` for the compose file it uses.
 
 Configuration via environment variables: `PORT` (default 8420), `DATA_DIR`
 (default `./data`).
