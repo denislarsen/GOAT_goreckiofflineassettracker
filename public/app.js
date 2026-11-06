@@ -388,6 +388,7 @@ function investmentForm(existing) {
     ${field('Name', `<input name="name" required value="${esc(existing?.name || '')}" placeholder="e.g. Nordea EM Index Fund">`)}
     ${field('Type', `<select name="type">${TYPE_ORDER.map((t) => `<option value="${t}" ${existing?.type === t ? 'selected' : ''}>${TYPE_META[t].label}</option>`).join('')}</select>`)}
     <div class="field"><label class="checkline"><input type="checkbox" name="cornerstone" ${existing?.cornerstone ? 'checked' : ''}> Cornerstone — a source of wealth, shown at the top of the dashboard</label></div>
+    <div class="field cornerstone-count" ${existing?.cornerstone ? '' : 'hidden'}><label class="checkline"><input type="checkbox" name="countAbove" ${existing?.countAbove ? 'checked' : ''}> …and also count it in the figures above (Available now / Locked / Until an exit) — e.g. cash at a bank</label></div>
     <div class="field-row">
       ${field('Liquidity', `<select name="liquidity">${LIQ_ORDER.map((l) => `<option value="${l}" ${(existing ? liquidityOf(existing) : 'liquid') === l ? 'selected' : ''}>${LIQ_META[l].label} — ${LIQ_META[l].step.toLowerCase()}</option>`).join('')}</select>`, 'Liquid: sellable within days. Fixed term: locked but with a known end date. Illiquid: startups & unlisted — money only at an exit.')}
       ${field('Expected release year', `<input name="maturityYear" type="number" min="2000" max="2100" value="${existing?.maturityYear ?? ''}" placeholder="e.g. 2032">`, 'For fixed-term investments — roughly when the money comes back.')}
@@ -411,6 +412,7 @@ function investmentForm(existing) {
     const common = {
       name: d.name.trim(), type: d.type, groupIds: d._checked, notes: d.notes,
       cornerstone: d.cornerstone === 'on',
+      countAbove: d.cornerstone === 'on' && d.countAbove === 'on',
       liquidity: d.liquidity,
       maturityYear: isFinite(maturityYear) ? maturityYear : null,
       ownershipPct: isFinite(ownershipPct) && ownershipPct > 0 ? ownershipPct : null,
@@ -430,6 +432,15 @@ function investmentForm(existing) {
     }
   });
   wireIsinField();
+  const form = document.getElementById('dialogForm');
+  const cs = form.querySelector('input[name=cornerstone]');
+  cs.addEventListener('change', () => { form.querySelector('.cornerstone-count').hidden = !cs.checked; });
+}
+
+// Counted in the liquidity steps and the managed portfolio: everything that
+// is not a cornerstone, plus cornerstones marked "also count it above".
+function countsAbove(inv) {
+  return !inv.cornerstone || !!inv.countAbove;
 }
 
 // Show the ISIN field only for funds, and let "Test code" ask the server.
@@ -705,18 +716,19 @@ function cornerstoneCardHtml(inv) {
         <div class="cstone-name">${esc(inv.name)}</div>
         <div class="cstone-detail">${esc(detail)}</div>
         <div class="cstone-value">${fmtMoney(s.value)}</div>
-        <div class="cstone-foot">${stalenessBadge(inv.id)}</div>
+        <div class="cstone-foot">${stalenessBadge(inv.id)}${inv.countAbove ? ` <span class="badge plain cstone-counted">also in ${esc(LIQ_META[liquidityOf(inv)].step)}</span>` : ''}</div>
       </div>
     </div>`;
 }
 
 function viewDashboard() {
   const cornerstones = state.investments.filter((i) => i.cornerstone);
-  const managed = state.investments.filter((i) => !i.cornerstone);
+  const managed = state.investments.filter(countsAbove);
 
   // The operational view: only the managed portfolio, split by when the money
   // could actually be in your hands. Cornerstones (the big hypotheticals) are
-  // kept out of these figures and shown in their own section below.
+  // kept out of these figures and shown in their own section below — unless
+  // marked "also count it above" (e.g. cash), then they are in both places.
   const tiers = { liquid: { value: 0, count: 0 }, term: { value: 0, count: 0 }, illiquid: { value: 0, count: 0 } };
   let managedValue = 0, managedContributed = 0;
   const termYears = [];
@@ -737,7 +749,10 @@ function viewDashboard() {
     sourcesValue += s.value;
     sourcesContributed += s.contributed;
   }
-  const totalValue = managedValue + sourcesValue;
+  // Don't count a cornerstone twice in the grand total.
+  const totalValue = managedValue + cornerstones
+    .filter((i) => !i.countAbove)
+    .reduce((sum, i) => sum + investmentSummary(i).value, 0);
 
   const staleCount = state.investments.filter((i) => ['warning', 'serious'].includes(staleness(i.id).cls)).length;
 
@@ -799,7 +814,7 @@ function viewDashboard() {
     ${cornerstones.length ? `
     <div class="card">
       <div class="card-head"><div><h2>Sources of wealth</h2>
-        <p class="card-sub">The big hypotheticals — kept out of the figures above until the day they are realised.</p></div></div>
+        <p class="card-sub">The big hypotheticals — kept out of the figures above until the day they are realised${cornerstones.some((i) => i.countAbove) ? ', unless marked “also in”' : ''}.</p></div></div>
       <div class="cstone-grid">${cornerstones.map(cornerstoneCardHtml).join('')}</div>
       <div class="stale-note">Together: ${fmtMoney(sourcesValue)} at latest valuation · paid in ${fmtMoney(sourcesContributed)} · unrealised ${(() => {
         const g = sourcesValue - sourcesContributed;
