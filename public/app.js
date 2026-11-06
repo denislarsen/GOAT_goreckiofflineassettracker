@@ -5,6 +5,8 @@
 'use strict';
 
 let state = null;
+// Fund prices, kept by the server in data/prices.json (refreshed daily).
+let prices = { lastRunAt: null, entries: {} };
 
 const TYPE_META = {
   fund: { label: 'Fund', color: 'var(--series-1)', icon: '📈' },
@@ -48,10 +50,12 @@ function esc(s) {
   }[c]));
 }
 
+// Everything in GOAT is in euro.
+const CURRENCY = 'EUR';
+
 function fmtMoney(n) {
-  const cur = state?.settings?.currency || 'DKK';
   return new Intl.NumberFormat('da-DK', {
-    style: 'currency', currency: cur, maximumFractionDigits: 0,
+    style: 'currency', currency: CURRENCY, maximumFractionDigits: 0,
   }).format(n);
 }
 
@@ -97,19 +101,140 @@ function latestValuation(invId) {
 // valuation snapshot, adjusted for any contributions/withdrawals made AFTER that
 // snapshot (money moved in later is part of the value even if not yet revalued).
 // With no snapshot at all, the investment is carried at cost (net contributions).
+//
+// Funds with an ISIN go one step further: the latest valuation is projected
+// forward with the fund's price movement since that date (and each later
+// contribution with the movement since its own date). If no price can be had,
+// the plain valuation above is used.
 function currentValue(invId) {
   const val = latestValuation(invId);
   if (!val) return { value: netContributed(invId), basis: 'cost', asOf: null };
-  const later = contributionsFor(invId)
-    .filter((c) => c.date > val.date)
-    .reduce((sum, c) => sum + c.amount, 0);
-  return { value: val.value + later, basis: 'valuation', asOf: val.date };
+  const laterContribs = contributionsFor(invId).filter((c) => c.date > val.date);
+  const later = laterContribs.reduce((sum, c) => sum + c.amount, 0);
+  const plain = { value: val.value + later, basis: 'valuation', asOf: val.date };
+
+  const inv = state.investments.find((i) => i.id === invId);
+  const pe = priceEntryFor(inv);
+  if (!pe || !pe.price || !(pe.priceDate > val.date)) return plain;
+  const p0 = priceOn(pe, val.date);
+  if (!p0) return plain;
+  let value = val.value * (pe.price / p0);
+  for (const c of laterContribs) {
+    const pc = priceOn(pe, c.date);
+    value += pc ? c.amount * (pe.price / pc) : c.amount;
+  }
+  return {
+    value, basis: 'price', asOf: pe.priceDate, valuedAt: val.date, valuedValue: val.value,
+    anchorPrice: p0, price: pe.price, change: pe.price / p0 - 1, priceEntry: pe,
+    laterCount: laterContribs.length,
+  };
+}
+
+// ---------- fund prices ----------
+
+function normIsin(s) {
+  return String(s || '').replace(/\s+/g, '').toUpperCase();
+}
+
+function priceEntryFor(inv) {
+  const isin = inv && normIsin(inv.isin);
+  const pe = isin ? prices.entries?.[isin] : null;
+  // Only use prices expressed in euro (older cached prices may not be).
+  return pe && pe.currency === CURRENCY ? pe : null;
+}
+
+// Closing price on `date`, or the last one before it (weekends/holidays).
+// Falls back to the first price within a week after, if history starts later.
+function priceOn(pe, date) {
+  const h = pe.history || [];
+  let best = null;
+  for (const [d, c] of h) {
+    if (d <= date) best = c; else break;
+  }
+  if (best) return best;
+  const first = h[0];
+  if (first && daysBetween(date, first[0]) <= 7) return first[1];
+  return null;
+}
+
+function daysBetween(a, b) {
+  return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 86400000);
+}
+
+// A price is "failing" when the last attempt errored after the last success.
+function priceFailing(pe) {
+  return !!(pe?.error && (!pe.fetchedAt || pe.errorAt > pe.fetchedAt));
+}
+
+function fmtPrice(n, cur) {
+  return new Intl.NumberFormat('da-DK', { style: 'currency', currency: cur || CURRENCY, maximumFractionDigits: 2 }).format(n);
+}
+
+function fmtDateTime(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString('da-DK', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+async function loadPrices() {
+  try {
+    const res = await fetch('/api/prices');
+    if (res.ok) prices = await res.json();
+  } catch { /* keep what we have — values fall back to manual valuations */ }
+}
+
+let refreshingPrices = false;
+
+async function refreshPrices(isins) {
+  if (refreshingPrices) return;
+  refreshingPrices = true;
+  render();
+  try {
+    const res = await fetch('/api/prices/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(isins ? { isins } : {}),
+    });
+    if (res.ok) prices = await res.json();
+  } catch (err) {
+    alert('Could not reach the server to update prices: ' + err.message);
+  } finally {
+    refreshingPrices = false;
+    render();
+  }
+}
+
+function trackedFunds() {
+  return state.investments.filter((i) => normIsin(i.isin));
+}
+
+// One line telling how fresh the fund prices are, with an update button.
+function priceStatusHtml() {
+  if (!trackedFunds().length) return '';
+  const entries = Object.values(prices.entries || {});
+  const failing = entries.filter(priceFailing).length;
+  const dates = entries.map((e) => e.priceDate).filter(Boolean).sort();
+  const newest = dates[dates.length - 1];
+  return `
+    <div class="price-status">
+      <span>📈 Fund prices ${newest ? `as of <b>${fmtDate(newest)}</b>` : '<b>not fetched yet</b>'}
+        ${prices.lastRunAt ? `<span class="meta">· checked ${fmtDateTime(prices.lastRunAt)}</span>` : ''}
+        ${failing ? `<span class="badge warning"><span class="bdot"></span>${failing} could not be updated — using last known price</span>` : ''}</span>
+      <button class="btn ghost small" data-action="refresh-prices" ${refreshingPrices ? 'disabled' : ''}>${refreshingPrices ? 'Updating…' : '↻ Update prices'}</button>
+    </div>`;
 }
 
 // Staleness of the value estimate — the honest answer to "what is it worth?"
 function staleness(invId) {
   const cv = currentValue(invId);
   if (cv.basis === 'cost') return { cls: 'plain', label: 'At cost' };
+  if (cv.basis === 'price') {
+    const short = new Date(cv.asOf + 'T00:00:00').toLocaleDateString('da-DK', { day: 'numeric', month: 'short' });
+    if (priceFailing(cv.priceEntry)) return { cls: 'warning', label: `Price ${short} · update failed` };
+    // Some funds (e.g. cat bond funds) only publish a price weekly.
+    return daysSince(cv.asOf) <= 10
+      ? { cls: 'good', label: `Price ${short}` }
+      : { cls: 'warning', label: `Price ${short}` };
+  }
   const days = daysSince(cv.asOf);
   if (days <= 90) return { cls: 'good', label: 'Fresh' };
   if (days <= 365) return { cls: 'warning', label: `${Math.round(days / 30)} mo old` };
@@ -121,7 +246,7 @@ function investmentSummary(inv) {
   const cv = currentValue(inv.id);
   const gain = cv.value - contributed;
   const gainPct = contributed > 0 ? (gain / contributed) * 100 : null;
-  return { contributed, value: cv.value, basis: cv.basis, asOf: cv.asOf, gain, gainPct };
+  return { ...cv, contributed, gain, gainPct };
 }
 
 function groupSummary(groupId) {
@@ -221,6 +346,16 @@ function investmentForm(existing) {
       ${field('Liquidity', `<select name="liquidity">${LIQ_ORDER.map((l) => `<option value="${l}" ${(existing ? liquidityOf(existing) : 'liquid') === l ? 'selected' : ''}>${LIQ_META[l].label} — ${LIQ_META[l].step.toLowerCase()}</option>`).join('')}</select>`, 'Liquid: sellable within days. Fixed term: locked but with a known end date. Illiquid: startups & unlisted — money only at an exit.')}
       ${field('Expected release year', `<input name="maturityYear" type="number" min="2000" max="2100" value="${existing?.maturityYear ?? ''}" placeholder="e.g. 2032">`, 'For fixed-term investments — roughly when the money comes back.')}
     </div>
+    <div class="field isin-field" ${(existing?.type || 'fund') === 'fund' ? '' : 'hidden'}>
+      <label>Fund code (ISIN) · ticker</label>
+      <div class="isin-row">
+        <input name="isin" value="${esc(existing?.isin || '')}" placeholder="e.g. IE00BF4RFH31" autocapitalize="characters" autocomplete="off" spellcheck="false">
+        <input name="ticker" class="ticker-input" value="${esc(existing?.ticker || '')}" placeholder="Ticker" aria-label="Ticker (optional)" autocapitalize="characters" autocomplete="off" spellcheck="false">
+        <button type="button" class="btn ghost small" data-test-isin>Test code</button>
+      </div>
+      <div class="isin-result" aria-live="polite"></div>
+      <div class="hint">Optional. With a code, the value follows the fund's price from your latest valuation onwards. Prices are fetched once a day. Ticker (optional, from the bank statement, e.g. IUSN) helps find the listing in euro.</div>
+    </div>
     ${field('Ownership %', `<input name="ownershipPct" type="number" step="any" min="0" max="100" value="${existing?.ownershipPct ?? ''}" placeholder="e.g. 2.12">`, 'Optional — for stakes in companies. Lets you value the position from the company’s total valuation.')}
     ${field('Groups', groupChecks(existing?.groupIds || []))}
     ${field('Notes', `<textarea name="notes" placeholder="Anything worth remembering — terms, agreements, links to contract files on the NAS…">${esc(existing?.notes || '')}</textarea>`)}
@@ -233,16 +368,49 @@ function investmentForm(existing) {
       liquidity: d.liquidity,
       maturityYear: isFinite(maturityYear) ? maturityYear : null,
       ownershipPct: isFinite(ownershipPct) && ownershipPct > 0 ? ownershipPct : null,
+      isin: d.type === 'fund' && normIsin(d.isin) ? normIsin(d.isin) : null,
+      ticker: d.type === 'fund' && normIsin(d.isin) && d.ticker.trim() ? d.ticker.trim().toUpperCase() : null,
     };
+    const newIsin = common.isin && (common.isin !== existing?.isin || common.ticker !== (existing?.ticker || null)
+      || !priceEntryFor({ isin: common.isin }));
+    const after = () => { if (newIsin) refreshPrices([common.isin]); };
     if (existing) {
       Object.assign(existing, common);
-      mutate(() => {});
+      mutate(() => {}).then(after);
     } else {
       mutate(() => state.investments.push({
         id: uid(), ...common, contacts: [], documents: [], createdAt: today(),
-      }));
+      })).then(after);
     }
   });
+  wireIsinField();
+}
+
+// Show the ISIN field only for funds, and let "Test code" ask the server.
+function wireIsinField() {
+  const form = document.getElementById('dialogForm');
+  const typeSel = form.querySelector('select[name=type]');
+  const box = form.querySelector('.isin-field');
+  if (!typeSel || !box) return;
+  typeSel.addEventListener('change', () => { box.hidden = typeSel.value !== 'fund'; });
+  const out = box.querySelector('.isin-result');
+  box.querySelector('[data-test-isin]').onclick = async () => {
+    const isin = normIsin(box.querySelector('input[name=isin]').value);
+    const ticker = box.querySelector('input[name=ticker]').value.trim();
+    if (!isin) { out.innerHTML = '<span class="neg">Type a code first.</span>'; return; }
+    out.innerHTML = '<span class="meta">Looking it up…</span>';
+    try {
+      const r = await (await fetch('/api/prices/test?isin=' + encodeURIComponent(isin) + '&ticker=' + encodeURIComponent(ticker))).json();
+      const base = CURRENCY;
+      out.innerHTML = r.ok
+        ? `<div class="isin-ok">✓ <b>${esc(r.name)}</b><br>
+             ${fmtPrice(r.price, r.currency && r.currency !== 'GBp' ? r.currency : undefined)}${r.currency === 'GBp' ? ' (pence)' : ''} · price from ${fmtDate(r.priceDate)} · via ${esc(r.providerLabel)}
+             ${r.currency && r.currency !== base ? `<br><span class="meta">Quoted in ${esc(r.currency)} — converted to ${esc(base)} with the day's exchange rate.</span>` : ''}</div>`
+        : `<div class="neg">✗ Not found. ${esc(r.error || '')}</div>`;
+    } catch (err) {
+      out.innerHTML = `<div class="neg">Could not reach the server: ${esc(err.message)}</div>`;
+    }
+  };
 }
 
 function contributionForm(invId, existing) {
@@ -299,7 +467,9 @@ function quickValueForm(inv) {
   const s = investmentSummary(inv);
   const basisLine = s.basis === 'cost'
     ? 'carried at cost — no valuation recorded yet'
-    : `last valued ${fmtDate(s.asOf)}`;
+    : s.basis === 'price'
+      ? `projected with the fund price of ${fmtDate(s.asOf)} (last valued ${fmtDate(s.valuedAt)})`
+      : `last valued ${fmtDate(s.asOf)}`;
   openDialog(`Update value — ${inv.name}`, `
     <p class="quick-current">Current value <b>${fmtMoney(s.value)}</b> · ${esc(basisLine)}</p>
     <button type="button" class="btn confirm-same" data-confirm-same>✓ Still ${fmtMoney(s.value)} — confirm as of today</button>
@@ -593,6 +763,7 @@ function viewDashboard() {
     </div>` : ''}
     ${allocationCard(managed)}
     <div class="card">
+      ${priceStatusHtml()}
       <div class="card-head"><h2>Managed portfolio</h2>
         ${staleCount ? `<span class="badge warning"><span class="bdot"></span>${staleCount} value${staleCount === 1 ? '' : 's'} need${staleCount === 1 ? 's' : ''} a refresh</span>` : '<span class="badge good"><span class="bdot"></span>all values fresh</span>'}</div>
       ${investmentsTable(managed)}
@@ -615,7 +786,7 @@ function viewInvestments() {
       <div><h1>Investments</h1><p class="view-sub">Everything you own, in one list.</p></div>
       <button class="btn" data-action="add-investment">+ Add investment</button>
     </div>
-    <div class="card">${investmentsTable(state.investments)}</div>`;
+    <div class="card">${priceStatusHtml()}${investmentsTable(state.investments)}</div>`;
 }
 
 function viewInvestmentDetail(id) {
@@ -676,10 +847,13 @@ function viewInvestmentDetail(id) {
     </div>
     <div class="tiles">
       <div class="tile"><div class="tile-label">Current value</div><div class="tile-value">${fmtMoney(s.value)}</div>
-        <div class="tile-delta flat">${s.basis === 'cost' ? 'carried at cost — no valuation yet' : `last valued ${fmtDate(s.asOf)}`}</div></div>
+        <div class="tile-delta flat">${s.basis === 'cost' ? 'carried at cost — no valuation yet'
+          : s.basis === 'price' ? `fund price of ${fmtDate(s.asOf)} · last valued ${fmtDate(s.valuedAt)}`
+          : `last valued ${fmtDate(s.asOf)}`}</div></div>
       <div class="tile"><div class="tile-label">Paid in (net)</div><div class="tile-value">${fmtMoney(s.contributed)}</div></div>
       <div class="tile"><div class="tile-label">Gain</div><div class="tile-value">${gainCellHtml(s.gain, s.gainPct)}</div></div>
     </div>
+    ${priceCardHtml(inv, s)}
     <div class="detail-grid">
       <div class="card">
         <div class="card-head"><h2>Money in / out</h2><button class="btn ghost small" data-action="add-contribution">+ Add</button></div>
@@ -700,6 +874,41 @@ function viewInvestmentDetail(id) {
       </div>
     </div>
     ${inv.notes ? `<div class="card"><h2>Notes</h2><div class="notes-block">${esc(inv.notes)}</div></div>` : ''}`;
+}
+
+// The fund-price panel on an investment's page: where the price comes from,
+// how old it is, and how it moves the value.
+function priceCardHtml(inv, s) {
+  const isin = normIsin(inv.isin);
+  if (!isin) return '';
+  const pe = priceEntryFor(inv);
+  const btn = `<button class="btn ghost small" data-action="refresh-prices" ${refreshingPrices ? 'disabled' : ''}>${refreshingPrices ? 'Updating…' : '↻ Update price'}</button>`;
+  let body;
+  if (!pe || !pe.price) {
+    body = pe?.error
+      ? `<p class="neg">No price could be fetched: ${esc(pe.error)}</p><p class="meta">The value stays at your latest manual valuation.</p>`
+      : '<p class="meta">No price fetched yet. Click “Update price”, or wait for the daily update.</p>';
+  } else {
+    const lines = [
+      `<b>${esc(pe.name || isin)}</b> <span class="meta">${esc(isin)}${pe.symbol ? ' · ' + esc(pe.symbol) : ''}</span>`,
+      `Price <b>${fmtPrice(pe.price, pe.currency)}</b> from <b>${fmtDate(pe.priceDate)}</b>
+        <span class="meta">· via ${esc(pe.provider === 'nasdaq' ? 'Nasdaq Nordic' : pe.provider === 'yahoo' ? 'Yahoo Finance' : pe.provider)}
+        · fetched ${fmtDateTime(pe.fetchedAt)}</span>`,
+    ];
+    if (pe.converted) lines.push(`<span class="meta">Quoted in ${esc(pe.nativeCurrency)}, converted to ${esc(pe.currency)} with the day's exchange rate.</span>`);
+    if (priceFailing(pe)) lines.push(`<span class="badge warning"><span class="bdot"></span>Latest update failed (${fmtDateTime(pe.errorAt)}) — using the price above</span> <span class="meta">${esc(pe.error)}</span>`);
+    if (s.basis === 'price') {
+      const pct = s.change * 100;
+      lines.push(`Valued at <b>${fmtMoney(s.valuedValue)}</b> on ${fmtDate(s.valuedAt)} (price then ${fmtPrice(s.anchorPrice, pe.currency)}).
+        The price has moved <span class="${pct >= 0 ? 'pos' : 'neg'}">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</span> since → <b>${fmtMoney(s.value)}</b> today${s.laterCount ? ', including money added since (each amount follows the price from its own date)' : ''}.`);
+    } else if (s.basis === 'cost') {
+      lines.push('<span class="meta">Record a valuation (or press ↻ Value) to start following the price from that day.</span>');
+    } else {
+      lines.push(`<span class="meta">Your latest valuation (${fmtDate(s.asOf)}) is as new as the price, so it is used as is.</span>`);
+    }
+    body = lines.map((l) => `<div class="price-line">${l}</div>`).join('');
+  }
+  return `<div class="card price-card"><div class="card-head"><h2>Fund price</h2>${btn}</div>${body}</div>`;
 }
 
 function viewGroups() {
@@ -758,15 +967,15 @@ function viewGroupDetail(id) {
 function viewSettings() {
   return `
     <h1>Settings</h1>
-    <p class="view-sub">Data lives in <code>data/goat-data.json</code> next to the server — nothing leaves your NAS.</p>
+    <p class="view-sub">Data lives in <code>data/goat-data.json</code> next to the server — nothing leaves your NAS. The only exception: to fetch prices, the server sends your funds' codes (ISIN) to the price source — never names or amounts.</p>
     <div class="card">
       <h2>Currency</h2>
-      <div class="field" style="max-width:220px">
-        <select id="currencySelect">
-          ${['DKK', 'EUR', 'USD', 'SEK', 'NOK', 'GBP'].map((c) => `<option ${state.settings.currency === c ? 'selected' : ''}>${c}</option>`).join('')}
-        </select>
-        <div class="hint">Used for display everywhere. Amounts are stored as plain numbers.</div>
-      </div>
+      <p class="view-sub">All amounts are in <b>euro (EUR)</b>. Fund prices quoted in other currencies are converted to euro with the day's exchange rate.</p>
+    </div>
+    <div class="card" id="priceSettings">
+      <h2>Fund prices</h2>
+      <p class="view-sub">Funds with a fund code (ISIN) follow their price automatically. Prices are fetched once a day (in the evening) and when you press ↻ Update prices.</p>
+      <div class="price-settings-body"><span class="meta">Loading…</span></div>
     </div>
     <div class="card">
       <h2>Backup & restore</h2>
@@ -1069,6 +1278,7 @@ function render() {
     gardenHandle = null;
   }
   view.innerHTML = (views[page] || views.dashboard)();
+  if (page === 'settings') renderPriceSettings();
   document.body.classList.toggle('in-closet', page === 'closet');
   document.body.classList.toggle('in-garden', page === 'garden');
   if (page === 'closet' && lastPage !== 'closet') {
@@ -1107,6 +1317,7 @@ function handleAction(action, targetId) {
     'add-contribution': () => contributionForm(id, null),
     'edit-contribution': () => contributionForm(id, state.contributions.find((c) => c.id === targetId)),
     'del-contribution': () => mutate(() => { state.contributions = state.contributions.filter((c) => c.id !== targetId); }),
+    'refresh-prices': () => refreshPrices(),
     'quick-value': () => quickValueForm(state.investments.find((i) => i.id === targetId)),
     'add-valuation': () => valuationForm(id, null),
     'edit-valuation': () => valuationForm(id, state.valuations.find((v) => v.id === targetId)),
@@ -1169,17 +1380,80 @@ document.addEventListener('click', (e) => {
   if (row) location.hash = row.dataset.href;
 });
 
-document.addEventListener('change', (e) => {
-  if (e.target.id === 'currencySelect') {
-    mutate(() => { state.settings.currency = e.target.value; });
+// ----- Settings: price source and token (the token stays on the server) -----
+
+async function renderPriceSettings() {
+  const box = document.querySelector('#priceSettings .price-settings-body');
+  if (!box) return;
+  let ps;
+  try {
+    ps = await (await fetch('/api/price-settings')).json();
+  } catch {
+    box.innerHTML = '<span class="neg">Could not load price settings.</span>';
+    return;
   }
+  const tokenProviders = ps.providers.filter((p) => p.needsToken);
+  box.innerHTML = `
+    <div class="field" style="max-width:420px">
+      <label>Where prices come from</label>
+      <select id="priceSource">
+        <option value="auto" ${ps.source === 'auto' ? 'selected' : ''}>Automatic — Nasdaq Nordic first, then Yahoo Finance</option>
+        ${ps.providers.map((p) => `<option value="${esc(p.id)}" ${ps.source === p.id ? 'selected' : ''}>${esc(p.label)} only</option>`).join('')}
+      </select>
+      <div class="hint">${ps.providers.map((p) => `<b>${esc(p.label)}:</b> ${esc(p.note)}`).join('<br>')}</div>
+    </div>
+    ${tokenProviders.map((p) => `
+    <div class="field" style="max-width:420px">
+      <label>${esc(p.label)} — token ${p.hasToken ? '<span class="badge good"><span class="bdot"></span>saved</span>' : ''}</label>
+      <div class="isin-row">
+        <input type="password" id="token-${esc(p.id)}" placeholder="${p.hasToken ? 'Saved — type a new one to replace it' : 'Paste the token here'}" autocomplete="off">
+        <button class="btn ghost small" data-save-token="${esc(p.id)}">Save</button>
+        ${p.hasToken ? `<button class="btn ghost small" data-clear-token="${esc(p.id)}">Remove</button>` : ''}
+      </div>
+      <div class="hint">Kept only on the NAS (in data/price-settings.json). It is never shown again, never sent to the browser and never part of the code or the data download.</div>
+    </div>`).join('')}
+    <div class="row-actions">
+      <button class="btn ghost" data-action="refresh-prices" ${refreshingPrices ? 'disabled' : ''}>↻ Update prices now</button>
+      <span class="meta">${prices.lastRunAt ? `Last full update: ${fmtDateTime(prices.lastRunAt)}` : 'No full update has run yet.'}</span>
+    </div>`;
+}
+
+async function savePriceSettings(body) {
+  try {
+    const res = await fetch('/api/price-settings', {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(res.status);
+  } catch (err) {
+    alert('Could not save: ' + err.message);
+    return;
+  }
+  // Changing the source clears the cached prices on the server; fetch anew.
+  await refreshPrices();
+  renderPriceSettings();
+}
+
+document.addEventListener('change', (e) => {
+  if (e.target.id === 'priceSource') savePriceSettings({ source: e.target.value });
+});
+
+document.addEventListener('click', (e) => {
+  const save = e.target.closest('[data-save-token]');
+  if (save) {
+    const id = save.dataset.saveToken;
+    const value = document.getElementById('token-' + id).value.trim();
+    if (value) savePriceSettings({ token: { provider: id, value } });
+    return;
+  }
+  const clear = e.target.closest('[data-clear-token]');
+  if (clear && confirm('Remove the saved token?')) savePriceSettings({ token: { provider: clear.dataset.clearToken, value: '' } });
 });
 
 window.addEventListener('hashchange', render);
 
 (async function start() {
   try {
-    await loadState();
+    await Promise.all([loadState(), loadPrices()]);
     render();
   } catch (err) {
     document.getElementById('view').innerHTML = `<h1>Could not load data</h1><p class="view-sub">${esc(err.message)} — is the server running?</p>`;

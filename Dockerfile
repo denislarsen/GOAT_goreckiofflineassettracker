@@ -1,6 +1,6 @@
 FROM node:22-alpine
 WORKDIR /app
-COPY server.js ./
+COPY server.js prices.js ./
 COPY public ./public
 ENV DATA_DIR=/data
 VOLUME /data
