@@ -105,6 +105,7 @@ const PROVIDERS = {
           if (!meta || !meta.regularMarketPrice) return null;
           const name = meta.longName || meta.shortName || symbol;
           if (mustMatchName && firstWord(name) !== firstWord(mustMatchName)) return null;
+          if (/^[A-Z]{3}\/[A-Z]{3}$/.test(name)) return null;
           const hit = { ref: { symbol }, name, currency: meta.currency || null, symbol };
           if (!fallback) fallback = hit;
           return hit.currency === opts.prefer ? hit : null;
@@ -118,11 +119,18 @@ const PROVIDERS = {
         return null;
       };
 
+      // 0) The listing found last time, if it still works.
+      if (opts.knownSymbol) {
+        const hit = await check(opts.knownSymbol);
+        if (hit) return hit;
+      }
       // 1) What a search for the ISIN finds directly, if it is in euro.
       const json = await getJson(`https://query2.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(isin)}&quotesCount=5&newsCount=0`);
       const quotes = (json?.quotes || []).filter((q) => q.symbol && q.isYahooFinance !== false);
       for (const q of quotes) {
-        const hit = await check(q.symbol);
+        // Yahoo sometimes lists broken entries (e.g. named "VUV/USD"):
+        // the name behind the price must match the search result's name.
+        const hit = await check(q.symbol, q.longname || q.shortname);
         if (hit) return hit;
       }
       // 2) The ticker from the bank statement, on a euro exchange.
@@ -131,7 +139,13 @@ const PROVIDERS = {
         const hit = ticker.includes('.') ? await check(ticker) : await withSuffixes(ticker);
         if (hit) return hit;
       }
-      // 3) The found ticker on a euro exchange — only if clearly the same fund.
+      // 3) Tickers that OpenFIGI (free, no token) lists for this ISIN on
+      //    euro exchanges, tried on Yahoo's euro exchanges.
+      for (const t of await figiEuroTickers(isin)) {
+        const hit = await withSuffixes(t);
+        if (hit) return hit;
+      }
+      // 4) The found ticker on a euro exchange — only if clearly the same fund.
       for (const q of quotes) {
         const root = q.symbol.split('.')[0];
         if (!root.startsWith('0P')) {
@@ -210,6 +224,28 @@ async function toBaseCurrency(history, currency, base) {
   return { history: out, currency: base, converted: true };
 }
 
+// OpenFIGI maps an ISIN to its tickers per exchange. We keep the tickers
+// used on German, Italian, French and Dutch exchanges (all quote in euro).
+const FIGI_EUR_EXCHANGES = new Set(['GY', 'GR', 'GF', 'GD', 'GM', 'GS', 'GT', 'GH', 'GZ', 'IM', 'FP', 'NA']);
+async function figiEuroTickers(isin) {
+  try {
+    const res = await fetch('https://api.openfigi.com/v3/mapping', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'User-Agent': UA },
+      body: JSON.stringify([{ idType: 'ID_ISIN', idValue: isin }]),
+      signal: AbortSignal.timeout(TIMEOUT_MS),
+    });
+    if (!res.ok) return [];
+    const data = (await res.json())?.[0]?.data || [];
+    const out = [];
+    for (const d of data) {
+      const t = String(d.ticker || '').trim().toUpperCase();
+      if (FIGI_EUR_EXCHANGES.has(d.exchCode) && /^[A-Z0-9]{2,8}$/.test(t) && !out.includes(t)) out.push(t);
+    }
+    return out.slice(0, 4);
+  } catch { return []; }
+}
+
 function firstWord(name) {
   return String(name || '').trim().split(/[\s(-]+/)[0].toLowerCase();
 }
@@ -255,7 +291,10 @@ function createPriceService({ dataDir, readState }) {
       const token = settings.tokens?.[id];
       if (p.needsToken && !token) { tried.push({ provider: id, error: 'no token set' }); continue; }
       try {
-        const info = await p.resolve(isin, token, { ticker: opts.ticker, prefer: BASE });
+        const info = await p.resolve(isin, token, {
+          ticker: opts.ticker, prefer: BASE,
+          knownSymbol: opts.known?.provider === id ? opts.known.symbol : null,
+        });
         const history = await p.history(info.ref, from, token);
         if (!history.length) throw new Error('found, but no prices');
         tried.push({ provider: id, ok: true, currency: info.currency });
@@ -307,7 +346,7 @@ function createPriceService({ dataDir, readState }) {
       for (const isin of isins) {
         const old = prices.entries[isin] || { isin };
         try {
-          const r = await lookup(isin, settings, needed[isin], { ticker: tickers[isin] });
+          const r = await lookup(isin, settings, needed[isin], { ticker: tickers[isin], known: old });
           const nativeLast = r.history[r.history.length - 1];
           const conv = await toBaseCurrency(r.history, r.currency, base);
           const last = conv.history[conv.history.length - 1];

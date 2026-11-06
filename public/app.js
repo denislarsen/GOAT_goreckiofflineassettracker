@@ -136,6 +136,52 @@ function normIsin(s) {
   return String(s || '').replace(/\s+/g, '').toUpperCase();
 }
 
+// ISIN = 2 letters + 9 letters/digits + a check digit (same rule as the server).
+function isValidIsin(isin) {
+  if (!/^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(isin)) return false;
+  const digits = isin.split('').map((c) => (/[A-Z]/.test(c) ? String(c.charCodeAt(0) - 55) : c)).join('');
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) {
+    let d = +digits[digits.length - 1 - i];
+    if (i % 2 === 1) { d *= 2; if (d > 9) d -= 9; }
+    sum += d;
+  }
+  return sum % 10 === 0;
+}
+
+// Funds without a code: if the notes (or name) contain exactly one valid
+// ISIN, use it. Runs on start; returns what it did so it can be shown.
+let isinNotice = null;
+
+function adoptIsinsFromNotes() {
+  const added = [];
+  const missing = [];
+  for (const inv of state.investments) {
+    if (inv.type !== 'fund' || normIsin(inv.isin)) continue;
+    const text = `${inv.name || ''} ${inv.notes || ''}`.toUpperCase();
+    const found = [...new Set((text.match(/\b[A-Z]{2}[A-Z0-9]{9}[0-9]\b/g) || []).filter(isValidIsin))];
+    if (found.length === 1) {
+      inv.isin = found[0];
+      added.push(inv);
+    } else {
+      missing.push(inv);
+    }
+  }
+  return { added, missing };
+}
+
+function isinNoticeHtml() {
+  if (!isinNotice) return '';
+  const { added, missing } = isinNotice;
+  return `
+    <div class="card notice">
+      <div class="card-head"><h2>Fund codes</h2><button class="btn ghost small" data-action="dismiss-isin-notice">OK</button></div>
+      ${added.length ? `<p>Found the fund code (ISIN) in the notes and added it to ${added.length} fund${added.length === 1 ? '' : 's'} — their value now follows the price:</p>
+      <ul>${added.map((i) => `<li><a href="#/investment/${esc(i.id)}">${esc(i.name)}</a> <span class="meta">${esc(i.isin)}</span></li>`).join('')}</ul>` : ''}
+      ${missing.length ? `<p class="meta">No single fund code found in the notes of: ${missing.map((i) => `<a href="#/investment/${esc(i.id)}">${esc(i.name)}</a>`).join(', ')}. Add it under Edit if the fund has one.</p>` : ''}
+    </div>`;
+}
+
 function priceEntryFor(inv) {
   const isin = inv && normIsin(inv.isin);
   const pe = isin ? prices.entries?.[isin] : null;
@@ -725,6 +771,7 @@ function viewDashboard() {
       <div><h1>Dashboard</h1><p class="view-sub">What you could actually get your hands on — and when.</p></div>
       <button class="btn" data-action="add-investment">+ Add investment</button>
     </div>
+    ${isinNoticeHtml()}
     <div class="liq-band">
       <div class="liq-step now">
         <div class="liq-label">Available now</div>
@@ -1318,6 +1365,7 @@ function handleAction(action, targetId) {
     'edit-contribution': () => contributionForm(id, state.contributions.find((c) => c.id === targetId)),
     'del-contribution': () => mutate(() => { state.contributions = state.contributions.filter((c) => c.id !== targetId); }),
     'refresh-prices': () => refreshPrices(),
+    'dismiss-isin-notice': () => { isinNotice = null; render(); },
     'quick-value': () => quickValueForm(state.investments.find((i) => i.id === targetId)),
     'add-valuation': () => valuationForm(id, null),
     'edit-valuation': () => valuationForm(id, state.valuations.find((v) => v.id === targetId)),
@@ -1455,6 +1503,12 @@ window.addEventListener('hashchange', render);
   try {
     await Promise.all([loadState(), loadPrices()]);
     render();
+    const adopted = adoptIsinsFromNotes();
+    if (adopted.added.length) {
+      isinNotice = adopted;
+      await mutate(() => {});
+      await refreshPrices(adopted.added.map((i) => i.isin));
+    }
   } catch (err) {
     document.getElementById('view').innerHTML = `<h1>Could not load data</h1><p class="view-sub">${esc(err.message)} — is the server running?</p>`;
   }

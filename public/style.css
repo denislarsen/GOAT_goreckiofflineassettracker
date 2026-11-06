@@ -894,3 +894,7 @@ body.in-garden .view { max-width: none; padding: 0; }
 .price-card .price-line b { font-variant-numeric: tabular-nums; }
 [hidden] { display: none !important; }
 .isin-row .ticker-input { flex: 0 1 88px; }
+.notice { border-color: var(--brand); }
+.notice p { margin: 4px 0 8px; font-size: 0.9rem; }
+.notice ul { margin: 0 0 8px; padding-left: 20px; font-size: 0.9rem; }
+.notice a { color: var(--brand-dark); }
